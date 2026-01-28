@@ -43,10 +43,10 @@ export function getModel(modelSpecifier?: string): LanguageModelV2 {
 
   // default names
   const defaults = {
-    openai: process.env.OPENAI_MODEL || 'gpt-5',
-    anthropic: 'claude-3-haiku-20240307',
-    google: 'gemini-1.5-flash',
-    xai: 'grok-2-latest',
+    openai: process.env.OPENAI_MODEL || 'gpt-5.2',
+    anthropic: process.env.ANTHROPIC_MODEL || 'claude-opus-4-5',
+    google: process.env.GOOGLE_MODEL || 'gemini-3-pro-preview',
+    xai: process.env.XAI_MODEL || 'grok-4-1-fast-reasoning',
   } as const;
 
   const modelName =
@@ -87,7 +87,7 @@ export function getModel(modelSpecifier?: string): LanguageModelV2 {
 }
 
 export function getDefaultModel(): LanguageModelV2 {
-  return getModel(`openai:${process.env.OPENAI_MODEL || 'gpt-5'}`);
+  return getModel(`openai:${process.env.OPENAI_MODEL || 'gpt-5.2'}`);
 }
 
 const MinChunkSize = 140;

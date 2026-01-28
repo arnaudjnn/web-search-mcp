@@ -89,7 +89,9 @@ function createServer(): McpServer {
             stats: {
               totalLearnings: result.learnings.length,
               totalSources: result.visitedUrls.length,
-              averageReliability: result.weightedLearnings.reduce((acc, curr) => acc + curr.reliability, 0) / result.weightedLearnings.length
+              averageReliability: result.weightedLearnings.length > 0
+                ? result.weightedLearnings.reduce((acc, curr) => acc + curr.reliability, 0) / result.weightedLearnings.length
+                : 0
             },
           },
         };

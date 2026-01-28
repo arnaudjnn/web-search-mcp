@@ -51,7 +51,12 @@ async function run() {
       10,
     ) || 2;
 
-  const chosenProvider = (await askQuestion('Model provider (openai|anthropic|google|xai) [openai]: ')).trim() || 'openai';
+  const providerInput = (await askQuestion('Model provider (openai|anthropic|google|xai) [openai]: ')).trim();
+  const allowedProviders = ['openai', 'anthropic', 'google', 'xai'];
+  const chosenProvider = allowedProviders.includes(providerInput) ? providerInput : 'openai';
+  if (providerInput && chosenProvider === 'openai' && providerInput !== 'openai') {
+    log(`Unknown provider "${providerInput}", defaulting to openai.`);
+  }
   const chosenModelName = (await askQuestion('Model name (enter for default): ')).trim();
   const modelSpecifier = chosenModelName ? `${chosenProvider}:${chosenModelName}` : `${chosenProvider}:`;
   const model = getModel(modelSpecifier);
@@ -168,7 +173,9 @@ ${followUpQuestions.map((q: string, i: number) => `Q: ${q}\nA: ${answers[i]}`).j
   });
 
   // Calculate weighted reliability score
-  const avgReliability = weightedLearnings.reduce((acc, curr) => acc + curr.reliability, 0) / weightedLearnings.length;
+  const avgReliability = weightedLearnings.length > 0
+    ? weightedLearnings.reduce((acc, curr) => acc + curr.reliability, 0) / weightedLearnings.length
+    : 0;
 
   researchSpan.end({
     output: {

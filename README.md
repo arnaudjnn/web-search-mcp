@@ -1,3 +1,7 @@
+# DISCLAIMER
+
+    This repo is an experiment on agent coding. 95% of the code is written by LLM's 
+
 # Open Deep Research MCP Server
 
 An AI-powered research assistant that performs deep, iterative research on any topic. It combines search engines, web scraping, and AI to explore topics in depth and generate comprehensive reports. Available as a Model Context Protocol (MCP) tool or standalone CLI. Look at exampleout.md to see what a report might look like.
@@ -53,8 +57,8 @@ Server runs on `http://localhost:3000/mcp` without session management.
 
 Pick a provider and model per run.
 
-- CLI: you will be prompted for provider and model. Example: `openai` + `gpt-5`.
-- MCP/HTTP: pass `model`, e.g. `openai:gpt-5`,
+- CLI: you will be prompted for provider and model. Example: `openai` + `gpt-5.2`.
+- MCP/HTTP: pass `model`, e.g. `openai:gpt-5.2` (also accepts `openai/gpt-5.2`).
 
 Set the corresponding API key in `.env.local`:
 
@@ -63,6 +67,21 @@ OPENAI_API_KEY=...
 ANTHROPIC_API_KEY=...
 GOOGLE_API_KEY=...
 XAI_API_KEY=...
+```
+
+Optionally set default models per provider:
+
+```
+OPENAI_MODEL=gpt-5.2
+ANTHROPIC_MODEL=claude-opus-4-5
+GOOGLE_MODEL=gemini-3-pro-preview
+XAI_MODEL=grok-4-1-fast-reasoning
+```
+
+If you use a non-default OpenAI endpoint:
+
+```
+OPENAI_ENDPOINT=https://api.openai.com/v1
 ```
 
 ## How It Works

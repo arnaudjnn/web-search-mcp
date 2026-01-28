@@ -51,11 +51,10 @@ export async function filterSearchResults({
     searchResults.map((result) =>
       limiter(async () => {
         if (!result.url) return null;
-
         const evaluation = await generateObject({
-        model,
-        system: systemPrompt(),
-        prompt: `Should we scrape this URL for: "${query}"?
+          model,
+          system: systemPrompt(),
+          prompt: `Should we scrape this URL for: "${query}"?
 
 URL: ${result.url}
 Domain: ${new URL(result.url).hostname}
@@ -71,11 +70,11 @@ ONLY filter out obvious junk:
 - Violates user preferences
 
 INCLUDE everything else - we'll evaluate properly after scraping.`,
-        schema: z.object({
-          shouldScrape: z.boolean(),
-          reasoning: z.string(),
-        }),
-      });
+          schema: z.object({
+            shouldScrape: z.boolean(),
+            reasoning: z.string(),
+          }),
+        });
 
         recordUsage(budget, (evaluation as any)?.usage);
 

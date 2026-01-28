@@ -69,6 +69,37 @@ type LearningWithReliability = {
   reliability: number;
 };
 
+function mergeWeightedLearnings(
+  existing: LearningWithReliability[],
+  incoming: LearningWithReliability[],
+): LearningWithReliability[] {
+  const byContent = new Map<string, LearningWithReliability>();
+  for (const item of [...existing, ...incoming]) {
+    const key = item.content.trim();
+    if (!key) continue;
+    const prev = byContent.get(key);
+    if (!prev || item.reliability > prev.reliability) {
+      byContent.set(key, { content: item.content, reliability: item.reliability });
+    }
+  }
+  return Array.from(byContent.values());
+}
+
+function mergeSourceMetadata(
+  existing: SourceMetadata[],
+  incoming: SourceMetadata[],
+): SourceMetadata[] {
+  const byUrl = new Map<string, SourceMetadata>();
+  for (const item of [...existing, ...incoming]) {
+    if (!item?.url) continue;
+    const prev = byUrl.get(item.url);
+    if (!prev || item.reliabilityScore > prev.reliabilityScore) {
+      byUrl.set(item.url, item);
+    }
+  }
+  return Array.from(byUrl.values());
+}
+
 // Natural-language source preference rules parsed from user input
 type SuitabilityDecision = {
   use: boolean;
@@ -105,6 +136,8 @@ export type ResearchDirection = {
   parentGoal?: string;  // Track which research goal led to this question
 };
 
+const byPriorityDesc = (a: ResearchDirection, b: ResearchDirection) => b.priority - a.priority;
+
 async function generateSerpQueries({
   query,
   numQueries = 3,
@@ -128,7 +161,7 @@ async function generateSerpQueries({
   const weightedLearnings: LearningWithReliability[] = learnings && learningReliabilities 
     ? learnings.map((content, i) => ({
         content,
-        reliability: learningReliabilities[i] || 0.5
+        reliability: learningReliabilities[i] ?? 0.5,
       }))
     : [];
 
@@ -150,7 +183,7 @@ When generating new queries:
 ${researchDirections.length > 0 
   ? `\nPrioritized research directions to explore (higher priority = more important):
 ${researchDirections
-  .sort((a, b) => b.priority - a.priority)
+  .sort(byPriorityDesc)
   .map(d => `[Priority: ${d.priority}] ${d.question}${d.parentGoal ? `\n  (From previous goal: ${d.parentGoal})` : ''}`)
   .join('\n')}
 
@@ -494,6 +527,7 @@ export async function deepResearch({
   learnings = [],
   learningReliabilities = [],
   visitedUrls = [],
+  sourceMetadata = [],
   weightedLearnings = [],
   researchDirections = [],
   onProgress,
@@ -508,6 +542,7 @@ export async function deepResearch({
   learnings?: string[];
   learningReliabilities?: number[];
   visitedUrls?: string[];
+  sourceMetadata?: SourceMetadata[];
   weightedLearnings?: LearningWithReliability[];
   researchDirections?: ResearchDirection[];
   onProgress?: (progress: ResearchProgress) => void;
@@ -524,6 +559,18 @@ export async function deepResearch({
   budget?: { usedTokens: number; tokenBudget?: number; reached: boolean };
 }> {
   const model = providedModel ?? getDefaultModel();
+  const seededWeightedLearnings =
+    weightedLearnings.length > 0
+      ? weightedLearnings
+      : learnings.map((content, i) => ({
+          content,
+          reliability: learningReliabilities[i] ?? 0.5,
+        }));
+  const normalizedWeightedLearnings = mergeWeightedLearnings([], seededWeightedLearnings);
+  const normalizedLearnings = normalizedWeightedLearnings.map(l => l.content);
+  const normalizedLearningReliabilities = normalizedWeightedLearnings.map(l => l.reliability);
+  const normalizedSourceMetadata = mergeSourceMetadata([], sourceMetadata);
+
   // initialize/reuse token budget for this research session
   const budget: BudgetState | undefined =
     typeof tokenBudget === 'number' || budgetState
@@ -546,14 +593,30 @@ export async function deepResearch({
 
   const serpQueries = await generateSerpQueries({
     query,
-    learnings,
-    learningReliabilities,
+    learnings: normalizedLearnings,
+    learningReliabilities: normalizedLearningReliabilities,
     numQueries: breadth,
     researchDirections,  // Pass research directions to influence query generation
     sourcePreferences,
     model,
     budget,
   });
+
+  if (serpQueries.length === 0) {
+    reportProgress({
+      totalQueries: 0,
+      completedQueries: 0,
+      currentQuery: undefined,
+    });
+    return {
+      learnings: normalizedLearnings,
+      learningReliabilities: normalizedLearningReliabilities,
+      visitedUrls,
+      sourceMetadata: normalizedSourceMetadata,
+      weightedLearnings: normalizedWeightedLearnings,
+      budget,
+    };
+  }
 
   reportProgress({
     totalQueries: serpQueries.length,
@@ -620,10 +683,17 @@ export async function deepResearch({
             budget,
           });
           
-          const allLearnings = [...learnings, ...processedResult.learnings];
-          const allUrls = [...visitedUrls, ...newUrls];
-          const allSourceMetadata = [...(processedResult.sourceMetadata || [])];
-          const allWeightedLearnings = [...weightedLearnings, ...processedResult.weightedLearnings];
+          const allWeightedLearnings = mergeWeightedLearnings(
+            normalizedWeightedLearnings,
+            processedResult.weightedLearnings,
+          );
+          const allLearnings = allWeightedLearnings.map(l => l.content);
+          const allLearningReliabilities = allWeightedLearnings.map(l => l.reliability);
+          const allUrls = Array.from(new Set([...visitedUrls, ...newUrls]));
+          const allSourceMetadata = mergeSourceMetadata(
+            normalizedSourceMetadata,
+            processedResult.sourceMetadata || [],
+          );
 
           if (budget?.reached) {
             reportProgress({
@@ -636,7 +706,7 @@ export async function deepResearch({
             });
             return {
               learnings: allLearnings,
-              learningReliabilities: processedResult.learningConfidences,
+              learningReliabilities: allLearningReliabilities,
               visitedUrls: allUrls,
               sourceMetadata: allSourceMetadata,
               weightedLearnings: allWeightedLearnings
@@ -669,8 +739,9 @@ Follow-up research directions: ${processedResult.followUpQuestions.map(q => `\n$
               breadth: newBreadth,
               depth: newDepth,
               learnings: allLearnings,
-              learningReliabilities: processedResult.learningConfidences,
+              learningReliabilities: allLearningReliabilities,
               visitedUrls: allUrls,
+              sourceMetadata: allSourceMetadata,
               weightedLearnings: allWeightedLearnings,
               researchDirections: processedResult.followUpQuestions.map((q, i) => ({
                 question: q,
@@ -691,7 +762,7 @@ Follow-up research directions: ${processedResult.followUpQuestions.map(q => `\n$
             });
             return {
               learnings: allLearnings,
-              learningReliabilities: processedResult.learningConfidences,
+              learningReliabilities: allLearningReliabilities,
               visitedUrls: allUrls,
               sourceMetadata: allSourceMetadata,
               weightedLearnings: allWeightedLearnings
@@ -715,12 +786,16 @@ Follow-up research directions: ${processedResult.followUpQuestions.map(q => `\n$
     ),
   );
 
+  const combinedWeightedLearnings = mergeWeightedLearnings(
+    [],
+    results.flatMap(r => r.weightedLearnings),
+  );
   const combinedResults = {
-    learnings: [...new Set(results.flatMap(r => r.learnings))],
-    learningReliabilities: [...new Set(results.flatMap(r => r.learningReliabilities))],
-    visitedUrls: [...new Set(results.flatMap(r => r.visitedUrls))],
-    sourceMetadata: [...new Set(results.flatMap(r => r.sourceMetadata))],
-    weightedLearnings: [...new Set(results.flatMap(r => r.weightedLearnings))],
+    learnings: combinedWeightedLearnings.map(l => l.content),
+    learningReliabilities: combinedWeightedLearnings.map(l => l.reliability),
+    visitedUrls: Array.from(new Set(results.flatMap(r => r.visitedUrls))),
+    sourceMetadata: mergeSourceMetadata([], results.flatMap(r => r.sourceMetadata)),
+    weightedLearnings: combinedWeightedLearnings,
     budget: budget
   };
 

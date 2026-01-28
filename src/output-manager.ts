@@ -29,10 +29,19 @@ export class OutputManager {
   }
 
   updateProgress(progress: ResearchProgress) {
+    const depthTotal = Math.max(progress.totalDepth, 0);
+    const depthCompleted = Math.max(depthTotal - progress.currentDepth, 0);
+    const depthPercent = depthTotal > 0 ? Math.round((depthCompleted / depthTotal) * 100) : 0;
+    const breadthTotal = Math.max(progress.totalBreadth, 0);
+    const breadthCompleted = Math.max(breadthTotal - progress.currentBreadth, 0);
+    const breadthPercent = breadthTotal > 0 ? Math.round((breadthCompleted / breadthTotal) * 100) : 0;
+    const queriesTotal = Math.max(progress.totalQueries, 0);
+    const queriesCompleted = Math.max(progress.completedQueries, 0);
+    const queriesPercent = queriesTotal > 0 ? Math.round((queriesCompleted / queriesTotal) * 100) : 0;
     this.progressArea = [
-      `Depth:    [${this.getProgressBar(progress.totalDepth - progress.currentDepth, progress.totalDepth)}] ${Math.round(((progress.totalDepth - progress.currentDepth) / progress.totalDepth) * 100)}%`,
-      `Breadth:  [${this.getProgressBar(progress.totalBreadth - progress.currentBreadth, progress.totalBreadth)}] ${Math.round(((progress.totalBreadth - progress.currentBreadth) / progress.totalBreadth) * 100)}%`,
-      `Queries:  [${this.getProgressBar(progress.completedQueries, progress.totalQueries)}] ${Math.round((progress.completedQueries / progress.totalQueries) * 100)}%`,
+      `Depth:    [${this.getProgressBar(depthCompleted, depthTotal)}] ${depthPercent}%`,
+      `Breadth:  [${this.getProgressBar(breadthCompleted, breadthTotal)}] ${breadthPercent}%`,
+      `Queries:  [${this.getProgressBar(queriesCompleted, queriesTotal)}] ${queriesPercent}%`,
       progress.currentQuery ? `Current:  ${progress.currentQuery}` : '',
     ];
     this.drawProgress();
@@ -50,6 +59,9 @@ export class OutputManager {
     const width = process.stderr.columns
       ? Math.min(30, process.stderr.columns - 20)
       : 30;
+    if (total <= 0) {
+      return ' '.repeat(width);
+    }
     const filled = Math.round((width * value) / total);
     return '█'.repeat(filled) + ' '.repeat(width - filled);
   }
