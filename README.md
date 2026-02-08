@@ -212,23 +212,7 @@ The final report includes all learnings and a sources section sorted by reliabil
 
 Click the button, add your `ANTHROPIC_API_KEY` (or another LLM provider key) during configuration, and hit **Deploy**. Railway provisions all 3 services (Redis, SearXNG, MCP Server) and wires them together automatically.
 
-## Configuration
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | Anthropic API key | — |
-| `OPENAI_API_KEY` | OpenAI API key | — |
-| `GOOGLE_API_KEY` | Google AI API key | — |
-| `XAI_API_KEY` | xAI API key | — |
-| `SEARXNG_URL` | SearXNG instance URL | `http://searxng.railway.internal:8080` |
-| `SEARXNG_ENGINES` | Comma-separated search engines | all enabled |
-| `SEARXNG_CATEGORIES` | Comma-separated categories | all |
-| `API_KEY` | API key to protect the MCP endpoint | — (open) |
-| `CONCURRENCY` | Max concurrent operations | `2` |
-| `CONTEXT_SIZE` | LLM context window (tokens) | `128000` |
-| `PORT` | HTTP server port | `3000` |
-
-### Securing the MCP Endpoint
+## Securing the MCP Endpoint
 
 Set the `API_KEY` environment variable to require authentication on all requests (except `/health`). Clients provide the key as a `Bearer` token in the `Authorization` header (shown in the examples above) or as an `?api_key=` query parameter.
 
