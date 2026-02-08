@@ -1,10 +1,30 @@
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  searxng:
+    image: searxng/searxng:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./searxng-settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      - SEARXNG_SECRET_KEY=dev-secret-key
+      - SEARXNG_REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+
   deep-research:
-    container_name: deep-research
     build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - SEARXNG_URL=http://searxng:8080
+      - CONCURRENCY=2
+      - PORT=3000
     env_file:
       - .env.local
-    volumes:
-      -  ./:/app/
-    tty: true
-    stdin_open: true
+    depends_on:
+      - searxng

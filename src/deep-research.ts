@@ -1,6 +1,5 @@
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
-import FirecrawlApp, { SearchResponse } from '@mendable/firecrawl-js';
 import { generateObject } from 'ai';
 import { config } from 'dotenv';
 import { compact } from 'lodash-es';
@@ -9,10 +8,11 @@ import { z } from 'zod';
 
 import { getDefaultModel, trimPrompt } from './ai/providers.js';
 import type { LanguageModelV2 } from '@ai-sdk/provider';
-import { firecrawl as firecrawlConfig } from './config.js';
+import { Config } from './config.js';
 import { OutputManager } from './output-manager.js';
 import { systemPrompt } from './prompt.js';
 import { filterSearchResults, scrapeUrls } from './scraper.js';
+import { searchSearXNG } from './searxng.js';
 
 // Get the directory name of the current module
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -53,13 +53,7 @@ type SourceMetadata = {
 };
 
 // Configurable concurrency limit
-const ConcurrencyLimit = firecrawlConfig.concurrency;
-
-// Initialize Firecrawl with config
-const firecrawl = new FirecrawlApp({
-  apiKey: firecrawlConfig.apiKey,
-  apiUrl: firecrawlConfig.baseUrl,
-});
+const ConcurrencyLimit = Config.concurrency;
 
 // Shared concurrency limiter for all research sessions
 const concurrencyLimiter = pLimit(ConcurrencyLimit);
@@ -638,19 +632,17 @@ export async function deepResearch({
         }
         try {
           // Step 1: Search only (no scraping yet)
-          const searchResults = await firecrawl.search(serpQuery.query, {
-            timeout: 45000,
+          const searchResults = await searchSearXNG(serpQuery.query, {
+            timeout: 45_000,
             limit: serpQuery.isVerificationQuery ? 8 : 5,
-            // No scrapeOptions - just get URLs, titles, descriptions
           });
 
           // Step 2: Filter search results before scraping
           const urlsToScrape = await filterSearchResults({
-            searchResults: (searchResults.data || []).map((item: any) => ({
+            searchResults: (searchResults.data || []).map((item) => ({
               url: item.url || '',
-              title: item.title || item.metadata?.title,
-              description: item.description || item.metadata?.description,
-              position: item.position,
+              title: item.title,
+              description: item.description,
             })),
             query: serpQuery.query,
             sourcePreferences,
@@ -660,7 +652,7 @@ export async function deepResearch({
           });
 
           // Step 3: Scrape only filtered URLs
-          const scrapedResults = await scrapeUrls(firecrawl, urlsToScrape);
+          const scrapedResults = await scrapeUrls(urlsToScrape);
 
           // Step 4: Build result object compatible with existing code
           const result = {

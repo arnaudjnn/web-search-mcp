@@ -1,0 +1,34 @@
+# see https://docs.searxng.org/admin/settings/settings.html#settings-use-default-settings
+use_default_settings: true
+
+server:
+  # We're only using the API, so we don't need most server settings
+  secret_key: "${SEARXNG_SECRET_KEY:-change_me_before_deploying}"  # Set this via SEARXNG_SECRET_KEY env var
+  limiter: false
+
+redis:
+  url: redis://redis:6379/0
+
+search:
+  formats:
+    - json  # We only need JSON format for API
+  safe_search: 0  # Disable safe search
+  autocomplete: "google"
+  default_lang: "en"
+  engines:
+    - name: google
+      shortcut: g
+      use_mobile_ui: false
+      disabled: false
+    - name: brave
+      shortcut: b
+      use_mobile_ui: false
+      disabled: false
+    - name: duckduckgo
+      shortcut: d
+      use_mobile_ui: false
+      disabled: false
+    - name: wikipedia
+      shortcut: w
+      use_mobile_ui: false
+      disabled: false

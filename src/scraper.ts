@@ -1,4 +1,5 @@
-import FirecrawlApp from '@mendable/firecrawl-js';
+import * as cheerio from 'cheerio';
+import TurndownService from 'turndown';
 import { generateObject } from 'ai';
 import type { LanguageModelV2 } from '@ai-sdk/provider';
 import type { LimitFunction } from 'p-limit';
@@ -65,7 +66,7 @@ ${sourcePreferences ? `User preferences to avoid:\n${sourcePreferences}\n` : ''}
 
 ONLY filter out obvious junk:
 - SEO spam / clickbait listicles
-- Ad-heavy aggregator sites  
+- Ad-heavy aggregator sites
 - Clearly irrelevant topics
 - Violates user preferences
 
@@ -87,25 +88,70 @@ INCLUDE everything else - we'll evaluate properly after scraping.`,
 }
 
 
+const REMOVE_SELECTORS = [
+  'script', 'style', 'noscript', 'iframe', 'svg',
+  'nav', 'header', 'footer',
+  '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]',
+  '.nav', '.navbar', '.menu', '.sidebar', '.ad', '.ads', '.advertisement',
+  '.cookie-banner', '.popup', '.modal',
+  '#cookie-consent', '#ad-container',
+];
+
+const turndown = new TurndownService({
+  headingStyle: 'atx',
+  codeBlockStyle: 'fenced',
+});
+
+async function scrapeUrl(
+  url: string,
+): Promise<{ url: string; title?: string; markdown?: string } | null> {
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(30_000),
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; DeepResearchBot/1.0)',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+      redirect: 'follow',
+    });
+
+    if (!response.ok) return null;
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
+      return null;
+    }
+
+    const html = await response.text();
+    const $ = cheerio.load(html);
+
+    // Remove junk elements
+    $(REMOVE_SELECTORS.join(', ')).remove();
+
+    const title = $('title').first().text().trim() || undefined;
+
+    // Get the main content area, or fall back to body
+    const mainContent = $('main, article, [role="main"], .content, #content').first();
+    const contentHtml = mainContent.length > 0 ? mainContent.html() : $('body').html();
+
+    if (!contentHtml) return null;
+
+    const markdown = turndown.turndown(contentHtml).trim();
+
+    return { url, title, markdown: markdown || undefined };
+  } catch {
+    return null;
+  }
+}
+
 export async function scrapeUrls(
-  firecrawl: FirecrawlApp,
-  urls: string[]
+  urls: string[],
 ): Promise<Array<{ url: string; title?: string; markdown?: string }>> {
   if (urls.length === 0) return [];
 
-  const results = await firecrawl.batchScrapeUrls(urls, {
-    formats: ['markdown'],
-  } as any);
+  const results = await Promise.all(urls.map(url => scrapeUrl(url)));
 
-  if ('error' in results) {
-    throw new Error(`Batch scrape failed: ${results.error}`);
-  }
-
-  return results.data.map((item: any) => ({
-    url: item.metadata?.sourceURL || item.url || '',
-    title: item.metadata?.title,
-    markdown: item.markdown,
-  }));
+  return results.filter(
+    (r): r is { url: string; title?: string; markdown?: string } => r !== null,
+  );
 }
-
-

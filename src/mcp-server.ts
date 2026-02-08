@@ -18,9 +18,8 @@ const log = (...args: any[]) => {
 // Log environment check
 log('Environment check:', {
   hasOpenAiKey: !!Config.openai.apiKey,
-  hasFirecrawlKey: !!Config.firecrawl.apiKey,
-  firecrawlBaseUrl: Config.firecrawl.baseUrl || '(using API)',
-  firecrawlConcurrency: Config.firecrawl.concurrency,
+  searxngUrl: Config.searxng.url,
+  concurrency: Config.concurrency,
 });
 
 const server = new McpServer({

@@ -16,9 +16,10 @@ const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   GOOGLE_API_KEY: z.string().optional(),
   XAI_API_KEY: z.string().optional(),
-  FIRECRAWL_BASE_URL: z.string().url().optional(),
-  FIRECRAWL_KEY: z.string().optional(),
-  FIRECRAWL_CONCURRENCY: z.string().transform(Number).default('2'),
+  SEARXNG_URL: z.string().default('http://searxng.railway.internal:8080'),
+  SEARXNG_ENGINES: z.string().optional(),
+  SEARXNG_CATEGORIES: z.string().optional(),
+  CONCURRENCY: z.string().transform(Number).default('2'),
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
 });
@@ -41,17 +42,17 @@ export const Config = {
   xai: {
     apiKey: env.XAI_API_KEY,
   },
-  firecrawl: {
-    baseUrl: env.FIRECRAWL_BASE_URL,
-    apiKey: env.FIRECRAWL_BASE_URL ? null : env.FIRECRAWL_KEY, // No key needed for local instance
-    concurrency: env.FIRECRAWL_CONCURRENCY,
+  searxng: {
+    url: env.SEARXNG_URL,
+    engines: env.SEARXNG_ENGINES,
+    categories: env.SEARXNG_CATEGORIES,
   },
+  concurrency: env.CONCURRENCY,
   langfuse: {
     publicKey: env.LANGFUSE_PUBLIC_KEY,
     secretKey: env.LANGFUSE_SECRET_KEY,
   },
-  isLocalFirecrawl: !!env.FIRECRAWL_BASE_URL,
 } as const;
 
 // Export individual configs for convenience
-export const { openai, firecrawl, langfuse } = Config;
+export const { openai, searxng, langfuse } = Config;

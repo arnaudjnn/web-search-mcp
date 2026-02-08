@@ -119,9 +119,8 @@ function createServer(): McpServer {
 // Log environment check
 log('Environment check:', {
   hasOpenAiKey: !!Config.openai.apiKey,
-  hasFirecrawlKey: !!Config.firecrawl.apiKey,
-  firecrawlBaseUrl: Config.firecrawl.baseUrl || '(using API)',
-  firecrawlConcurrency: Config.firecrawl.concurrency,
+  searxngUrl: Config.searxng.url,
+  concurrency: Config.concurrency,
 });
 
 const app = express();
@@ -181,7 +180,7 @@ app.delete('/mcp', async (req: Request, res: Response) => {
 });
 
 // Start the server
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT || '3000', 10);
 app.listen(PORT, () => {
   log(`Deep Research MCP Stateless Streamable HTTP Server listening on port ${PORT}`);
 });
