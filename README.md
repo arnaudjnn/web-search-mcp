@@ -223,9 +223,45 @@ Clicking the button deploys the MCP server from this repo. You then need to add 
 | `SEARXNG_URL` | SearXNG instance URL | `http://searxng.railway.internal:8080` |
 | `SEARXNG_ENGINES` | Comma-separated search engines | all enabled |
 | `SEARXNG_CATEGORIES` | Comma-separated categories | all |
+| `API_KEY` | API key to protect the MCP endpoint | — (open) |
 | `CONCURRENCY` | Max concurrent operations | `2` |
 | `CONTEXT_SIZE` | LLM context window (tokens) | `128000` |
 | `PORT` | HTTP server port | `3000` |
+
+### Securing the MCP Endpoint
+
+In production, set the `API_KEY` environment variable to require authentication on all requests (except `/health`). When set, clients must provide the key via one of:
+
+**Bearer token (recommended):**
+```bash
+curl -X POST https://your-server.up.railway.app/mcp \
+  -H "Authorization: Bearer your-api-key" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{ ... }'
+```
+
+**Query parameter:**
+```
+https://your-server.up.railway.app/mcp?api_key=your-api-key
+```
+
+**MCP client configuration (Claude Desktop example):**
+```json
+{
+  "mcpServers": {
+    "web-search": {
+      "type": "streamable-http",
+      "url": "https://your-server.up.railway.app/mcp",
+      "headers": {
+        "Authorization": "Bearer your-api-key"
+      }
+    }
+  }
+}
+```
+
+If `API_KEY` is not set, the server accepts all requests without authentication.
 
 ### Observability (Optional)
 
