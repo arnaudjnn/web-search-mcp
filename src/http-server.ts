@@ -155,8 +155,11 @@ app.post('/mcp', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/mcp', async (req: Request, res: Response) => {
-  log('Received GET MCP request');
+app.get('/health', (_req: Request, res: Response) => {
+  res.json({ status: 'ok' });
+});
+
+app.get('/mcp', async (_req: Request, res: Response) => {
   res.writeHead(405).end(JSON.stringify({
     jsonrpc: "2.0",
     error: {
