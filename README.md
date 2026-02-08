@@ -175,13 +175,42 @@ The final report includes all learnings and a sources section sorted by reliabil
 
 ## Deployment (Railway)
 
-Deploy as 3 services:
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/arnaudjnn/web-search-mcp&referralCode=arnaudjnn)
+
+Clicking the button deploys the MCP server from this repo. You then need to add **Redis** and **SearXNG** as companion services in the same project:
+
+### Step-by-step
+
+1. **Click the deploy button above** — this creates a new Railway project with the MCP server. Set the following environment variable when prompted:
+   - `ANTHROPIC_API_KEY` — your Anthropic API key (or another provider key)
+
+2. **Add Redis** — in the same project, click **+ New** > **Database** > **Redis**. Railway provisions it automatically.
+
+3. **Add SearXNG** — click **+ New** > **Docker Image**, enter:
+   ```
+   ghcr.io/joeychilson/searxng-railway:latest
+   ```
+   Then add these environment variables to the SearXNG service:
+   ```
+   SEARXNG_SECRET_KEY=<any random string>
+   SEARXNG_REDIS_URL=${{Redis.REDIS_URL}}
+   ```
+
+4. **Link services** — on the MCP server service, add/verify these variables:
+   ```
+   SEARXNG_URL=http://searxng.railway.internal:8080
+   ```
+   (`PORT` is auto-set by Railway.)
+
+5. **Redeploy** and your MCP endpoint is live at `https://<your-project>.up.railway.app/mcp`.
+
+### Service overview
 
 | Service | Source | Key Env Vars |
 |---------|--------|-------------|
 | **Redis** | Railway plugin | Auto-provisioned |
-| **SearXNG** | Docker image: `ghcr.io/joeychilson/searxng-railway:latest` | `SEARXNG_SECRET_KEY`, `SEARXNG_REDIS_URL=${{Redis.REDIS_URL}}` |
-| **MCP Server** | This repo (auto-detected Dockerfile) | `SEARXNG_URL=http://searxng.railway.internal:8080`, `ANTHROPIC_API_KEY`, `PORT` (auto-set) |
+| **SearXNG** | `ghcr.io/joeychilson/searxng-railway:latest` | `SEARXNG_SECRET_KEY`, `SEARXNG_REDIS_URL=${{Redis.REDIS_URL}}` |
+| **MCP Server** | This repo (Dockerfile) | `SEARXNG_URL=http://searxng.railway.internal:8080`, `ANTHROPIC_API_KEY` |
 
 ## Configuration
 
