@@ -152,32 +152,6 @@ Add to `.mcp.json` at the root of any project to make the tool available to all 
 }
 ```
 
-#### Local stdio mode (no HTTP)
-
-If you prefer running the server locally via stdio instead of HTTP:
-
-```bash
-pnpm run start:stdio
-```
-
-Then in Claude Desktop config:
-```json
-{
-  "mcpServers": {
-    "web-search": {
-      "command": "node",
-      "args": ["dist/mcp-server.js"],
-      "cwd": "/path/to/web-search-mcp"
-    }
-  }
-}
-```
-
-### CLI mode
-
-```bash
-pnpm run start
-```
 
 ## How It Works
 
