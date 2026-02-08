@@ -196,9 +196,9 @@ Clicking the button deploys the MCP server from this repo. You then need to add 
    SEARXNG_REDIS_URL=${{Redis.REDIS_URL}}
    ```
 
-4. **Link services** — on the MCP server service, add/verify these variables:
+4. **Link services** — on the MCP server service, add/verify these variables using Railway's reference syntax (this creates the visual link between services):
    ```
-   SEARXNG_URL=http://searxng.railway.internal:8080
+   SEARXNG_URL=http://${{searxng.RAILWAY_PRIVATE_DOMAIN}}:8080
    ```
    (`PORT` is auto-set by Railway.)
 
@@ -210,7 +210,7 @@ Clicking the button deploys the MCP server from this repo. You then need to add 
 |---------|--------|-------------|
 | **Redis** | Railway plugin | Auto-provisioned |
 | **SearXNG** | `ghcr.io/joeychilson/searxng-railway:latest` | `SEARXNG_SECRET_KEY`, `SEARXNG_REDIS_URL=${{Redis.REDIS_URL}}` |
-| **MCP Server** | This repo (Dockerfile) | `SEARXNG_URL=http://searxng.railway.internal:8080`, `ANTHROPIC_API_KEY` |
+| **MCP Server** | This repo (Dockerfile) | `SEARXNG_URL=http://${{searxng.RAILWAY_PRIVATE_DOMAIN}}:8080`, `ANTHROPIC_API_KEY` |
 
 ## Configuration
 
