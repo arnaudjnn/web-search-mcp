@@ -1,23 +1,20 @@
 # Web Search MCP
 
-An AI-powered deep research tool exposed as a [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server. It performs iterative web search, scrapes and evaluates sources, and generates comprehensive research reports with reliability assessments.
+An [MCP](https://modelcontextprotocol.io/) server that provides two tools: a fast **web search** powered by [SearXNG](https://github.com/searxng/searxng), and an AI-driven **deep research** engine that iteratively searches, scrapes, evaluates sources, and produces comprehensive reports.
 
 ## Architecture
 
-The server combines three responsibilities that were previously spread across 5+ services:
-
-1. **Search** — calls [SearXNG](https://github.com/searxng/searxng) (a privacy-respecting metasearch engine) directly via its JSON API
-2. **Scrape** — fetches pages with Node's built-in `fetch`, cleans HTML with [cheerio](https://github.com/cheeriojs/cheerio), and converts to Markdown with [Turndown](https://github.com/mixmark-io/turndown)
-3. **Research** — uses an LLM (your choice of provider) to generate queries, evaluate source reliability, extract learnings, and write the final report
-
 ```mermaid
 graph LR
-    Client["MCP Client<br/>(Claude, Cursor, etc.)"] --> Server["MCP Server"]
+    Client["MCP Client<br/>(Claude, Cursor, etc.)"] -->|web-search| Server["MCP Server"]
+    Client -->|deep-research| Server
     Server --> SearXNG
     SearXNG --> Redis
-    Server --> Scraper["Built-in Scraper<br/>fetch + cheerio + turndown"]
-    Server --> LLM["LLM API<br/>(Anthropic, OpenAI, etc.)"]
+    Server -.->|deep-research only| Scraper["Built-in Scraper<br/>fetch + cheerio + turndown"]
+    Server -.->|deep-research only| LLM["LLM API<br/>(Anthropic, OpenAI, etc.)"]
 ```
+
+The `web-search` tool only needs SearXNG. The `deep-research` tool additionally uses a built-in scraper ([cheerio](https://github.com/cheeriojs/cheerio) + [Turndown](https://github.com/mixmark-io/turndown)) and an LLM for reasoning.
 
 The full stack deploys as **3 services**: Redis, SearXNG, and this MCP server.
 
@@ -32,69 +29,6 @@ We took inspiration from Firecrawl's approach to:
 - **SearXNG as search backend** — Firecrawl's [self-hosted setup](https://github.com/mendableai/firecrawl/blob/main/SELF_HOST.md) uses SearXNG as a free, privacy-respecting search backend with no API key required
 
 By integrating search and scraping directly into the MCP server, we eliminated the Firecrawl dependency while keeping the same patterns that made it effective.
-
-## LLM Provider
-
-The server is **LLM-agnostic**. It uses the [Vercel AI SDK](https://sdk.vercel.ai/) and supports any of these providers:
-
-| Provider  | Env Var             | Default Model             |
-| --------- | ------------------- | ------------------------- |
-| Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-4-5`         |
-| OpenAI    | `OPENAI_API_KEY`    | `gpt-5.2`                 |
-| Google    | `GOOGLE_API_KEY`    | `gemini-3-pro-preview`    |
-| xAI       | `XAI_API_KEY`       | `grok-4-1-fast-reasoning` |
-
-The caller selects the model per request via the `model` parameter (e.g. `"anthropic:claude-sonnet-4-5"`). You only need an API key for the provider you use.
-
-LLMs are used for:
-
-- Generating targeted search queries from the research topic
-- Filtering search results before scraping (removing junk/spam)
-- Evaluating source reliability (scoring 0-1 with reasoning)
-- Extracting structured learnings from scraped content
-- Writing the final research report
-
-## Quick Start
-
-### 1. Clone and install
-
-```bash
-git clone https://github.com/arnaudjnn/web-search-mcp
-cd web-search-mcp
-pnpm install
-```
-
-### 2. Configure environment
-
-```bash
-cp .env.example .env.local
-```
-
-Edit `.env.local` and add at least one LLM API key:
-
-```bash
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-### 3. Start the local stack
-
-```bash
-docker compose up -d redis searxng
-```
-
-This starts Redis and SearXNG. Then run the MCP server:
-
-```bash
-SEARXNG_URL=http://localhost:8080 pnpm run start:http
-```
-
-The server is available at `http://localhost:3000/mcp`.
-
-### 4. Or run everything in Docker
-
-```bash
-docker compose up
-```
 
 ## Tools
 
@@ -123,6 +57,25 @@ AI-powered iterative research that searches, scrapes, evaluates sources, and wri
 | `model` | string (optional) | e.g. `"anthropic:claude-sonnet-4-5"` |
 | `tokenBudget` | number (optional) | Soft cap on research-phase tokens |
 | `sourcePreferences` | string (optional) | e.g. `"avoid SEO listicles, forums"` |
+
+#### LLM Provider
+
+The `deep-research` tool is **LLM-agnostic**. It uses the [Vercel AI SDK](https://sdk.vercel.ai/) and supports:
+
+| Provider | Env Var | Default Model |
+|----------|---------|---------------|
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-4-5` |
+| OpenAI | `OPENAI_API_KEY` | `gpt-5.2` |
+| Google | `GOOGLE_API_KEY` | `gemini-3-pro-preview` |
+| xAI | `XAI_API_KEY` | `grok-4-1-fast-reasoning` |
+
+The caller selects the model per request via the `model` parameter. You only need an API key for the provider you use. The LLM is used for:
+
+- Generating targeted search queries from the research topic
+- Filtering search results before scraping (removing junk/spam)
+- Evaluating source reliability (scoring 0-1 with reasoning)
+- Extracting structured learnings from scraped content
+- Writing the final research report
 
 ### Connecting to the Server
 
@@ -171,7 +124,7 @@ Add to `.mcp.json` at the root of any project to make the tool available to all 
 }
 ```
 
-## How It Works
+## How Deep Research Works
 
 ```mermaid
 flowchart TB
@@ -213,7 +166,7 @@ flowchart TB
     DP -->|No| MR[Markdown Report]
 ```
 
-At each depth level, the server:
+At each depth level:
 
 1. Generates targeted search queries using the LLM
 2. Searches via SearXNG (deduplicates across engines)
@@ -229,9 +182,51 @@ The final report includes all learnings and a sources section sorted by reliabil
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/arnaudjnn/web-search-mcp&referralCode=arnaudjnn)
 
-- Click **Deploy on Railway**: you'll see all 3 services listed (Redis, SearXNG, MCP Server)
+- Click **Deploy on Railway** — you'll see all 3 services listed (Redis, SearXNG, MCP Server)
 - Click **Configure** on the **mcp-server** service and add your `ANTHROPIC_API_KEY` (or another LLM provider key)
-- Click **Deploy**: Railway provisions everything and wires the services together automatically
+- Click **Deploy** — Railway provisions everything and wires the services together automatically
+
+## Quick Start (Local)
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/arnaudjnn/web-search-mcp
+cd web-search-mcp
+pnpm install
+```
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local` and add at least one LLM API key:
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+### 3. Start the local stack
+
+```bash
+docker compose up -d redis searxng
+```
+
+This starts Redis and SearXNG. Then run the MCP server:
+
+```bash
+SEARXNG_URL=http://localhost:8080 pnpm run start:http
+```
+
+The server is available at `http://localhost:3000/mcp`.
+
+### 4. Or run everything in Docker
+
+```bash
+docker compose up
+```
 
 ## Securing the MCP Endpoint
 
