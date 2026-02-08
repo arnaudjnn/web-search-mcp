@@ -1,87 +1,123 @@
-# DISCLAIMER
+# Web Search MCP
 
-    This repo is an experiment on agent coding. 95% of the code is written by LLM's 
+An AI-powered deep research tool exposed as a [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server. It performs iterative web search, scrapes and evaluates sources, and generates comprehensive research reports with reliability assessments.
 
-# Open Deep Research MCP Server
+## Architecture
 
-An AI-powered research assistant that performs deep, iterative research on any topic. It combines search engines, web scraping, and AI to explore topics in depth and generate comprehensive reports. Available as a Model Context Protocol (MCP) tool or standalone CLI. Look at exampleout.md to see what a report might look like.
+The server combines three responsibilities that were previously spread across 5+ services:
+
+1. **Search** — calls [SearXNG](https://github.com/searxng/searxng) (a privacy-respecting metasearch engine) directly via its JSON API
+2. **Scrape** — fetches pages with Node's built-in `fetch`, cleans HTML with [cheerio](https://github.com/cheeriojs/cheerio), and converts to Markdown with [Turndown](https://github.com/mixmark-io/turndown)
+3. **Research** — uses an LLM (your choice of provider) to generate queries, evaluate source reliability, extract learnings, and write the final report
+
+```
+MCP Client (Claude, etc.) --> MCP Server --> SearXNG --> Redis
+                                  |
+                                  +--> fetch + cheerio + turndown (scraping)
+                                  +--> LLM API (reasoning)
+```
+
+The full stack deploys as **3 services**: Redis, SearXNG, and this MCP server.
+
+### Inspired by Firecrawl
+
+This project originally used [Firecrawl](https://github.com/mendableai/firecrawl) as middleware between SearXNG and the MCP server. Firecrawl is an excellent open-source web scraping platform, but its full stack (API server, workers, Playwright service, Redis, SearXNG) requires 5+ services to self-host.
+
+We took inspiration from Firecrawl's approach to:
+- **Search-then-scrape pipeline** — [Firecrawl's search controller](https://github.com/mendableai/firecrawl/blob/main/apps/api/src/controllers/v1/search.ts) first searches, then scrapes only relevant results
+- **HTML-to-Markdown conversion** — Firecrawl converts raw HTML into clean Markdown for LLM consumption, a pattern we replicate with cheerio + Turndown
+- **SearXNG as search backend** — Firecrawl's [self-hosted setup](https://github.com/mendableai/firecrawl/blob/main/SELF_HOST.md) uses SearXNG as a free, privacy-respecting search backend with no API key required
+
+By integrating search and scraping directly into the MCP server, we eliminated the Firecrawl dependency while keeping the same patterns that made it effective.
+
+## LLM Provider
+
+The server is **LLM-agnostic**. It uses the [Vercel AI SDK](https://sdk.vercel.ai/) and supports any of these providers:
+
+| Provider | Env Var | Default Model |
+|----------|---------|---------------|
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-4-5` |
+| OpenAI | `OPENAI_API_KEY` | `gpt-5.2` |
+| Google | `GOOGLE_API_KEY` | `gemini-3-pro-preview` |
+| xAI | `XAI_API_KEY` | `grok-4-1-fast-reasoning` |
+
+The caller selects the model per request via the `model` parameter (e.g. `"anthropic:claude-sonnet-4-5"`). You only need an API key for the provider you use.
+
+LLMs are used for:
+- Generating targeted search queries from the research topic
+- Filtering search results before scraping (removing junk/spam)
+- Evaluating source reliability (scoring 0-1 with reasoning)
+- Extracting structured learnings from scraped content
+- Writing the final research report
 
 ## Quick Start
 
-1. Clone and install:
+### 1. Clone and install
+
 ```bash
-git clone https://github.com/Ozamatash/deep-research
-cd deep-research
-npm install
+git clone https://github.com/arnaudjnn/web-search-mcp
+cd web-search-mcp
+pnpm install
 ```
 
-2. Set up environment in `.env.local`:
+### 2. Configure environment
+
 ```bash
-# Copy the example environment file
 cp .env.example .env.local
 ```
 
-3. Build:
+Edit `.env.local` and add at least one LLM API key:
+
 ```bash
-# Build the server
-npm run build
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-4. Run the cli version:
+### 3. Start the local stack
+
 ```bash
-npm run start
+docker compose up -d redis searxng
 ```
-5. Test MCP Server with Claude Desktop:  
-Follow the guide thats at the bottom of server quickstart to add the server to Claude Desktop:  
-https://modelcontextprotocol.io/quickstart/server
 
-For remote servers: Streamable HTTP
+This starts Redis and SearXNG. Then run the MCP server:
+
 ```bash
-npm run start:http
-```
-Server runs on `http://localhost:3000/mcp` without session management.
-
-## Features
-
-- Performs deep, iterative research by generating targeted search queries
-- Controls research scope with depth (how deep) and breadth (how wide) parameters
-- Evaluates source reliability with detailed scoring (0-1) and reasoning
-- Prioritizes high-reliability sources (≥0.7) and verifies less reliable information
-- Generates follow-up questions to better understand research needs
-- Produces detailed markdown reports with findings, sources, and reliability assessments
-- Available as a Model Context Protocol (MCP) tool for AI agents
-- For now MCP version doesn't ask follow up questions
-- Natural-language source preferences (avoid listicles, forums, affiliate reviews, specific domains)
-
-### Model Selection (OpenAI, Anthropic, Google, xAI)
-
-Pick a provider and model per run.
-
-- CLI: you will be prompted for provider and model. Example: `openai` + `gpt-5.2`.
-- MCP/HTTP: pass `model`, e.g. `openai:gpt-5.2` (also accepts `openai/gpt-5.2`).
-
-Set the corresponding API key in `.env.local`:
-
-```
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
-GOOGLE_API_KEY=...
-XAI_API_KEY=...
+SEARXNG_URL=http://localhost:8080 pnpm run start:http
 ```
 
-Optionally set default models per provider:
+The server is available at `http://localhost:3000/mcp`.
 
-```
-OPENAI_MODEL=gpt-5.2
-ANTHROPIC_MODEL=claude-opus-4-5
-GOOGLE_MODEL=gemini-3-pro-preview
-XAI_MODEL=grok-4-1-fast-reasoning
+### 4. Or run everything in Docker
+
+```bash
+docker compose up
 ```
 
-If you use a non-default OpenAI endpoint:
+## Usage
 
+### As an MCP tool
+
+Connect any MCP client (Claude Desktop, etc.) to `http://localhost:3000/mcp`. The server exposes a single tool:
+
+**`deep-research`** with parameters:
+- `query` (string, required) — the research topic
+- `depth` (1-5) — how many levels deep to recurse
+- `breadth` (1-5) — how many parallel queries per level
+- `model` (string, optional) — e.g. `"anthropic:claude-sonnet-4-5"`
+- `tokenBudget` (number, optional) — soft cap on research-phase tokens
+- `sourcePreferences` (string, optional) — e.g. `"avoid SEO listicles, forums"`
+
+### As stdio MCP server (for Claude Desktop)
+
+```bash
+pnpm run start:stdio
 ```
-OPENAI_ENDPOINT=https://api.openai.com/v1
+
+Follow the [MCP server quickstart](https://modelcontextprotocol.io/quickstart/server) to add it to Claude Desktop.
+
+### CLI mode
+
+```bash
+pnpm run start
 ```
 
 ## How It Works
@@ -92,87 +128,86 @@ flowchart TB
         Q[User Query]
         B[Breadth Parameter]
         D[Depth Parameter]
-        FQ[Feedback Questions]
     end
 
-    subgraph Research[Deep Research]
+    subgraph Research[Deep Research Loop]
         direction TB
         SQ[Generate SERP Queries]
-        SR[Search]
-        RE[Source Reliability Evaluation]
-        PR[Process Results]
+        SR[Search via SearXNG]
+        FI[Filter Results]
+        SC[Scrape URLs]
+        RE[Evaluate Source Reliability]
+        PR[Extract Learnings]
     end
 
-    subgraph Results[Research Output]
+    subgraph Results[Output]
         direction TB
         L((Learnings with
         Reliability Scores))
-        SM((Source Metadata))
-        ND((Next Directions:
-        Prior Goals,
-        New Questions))
+        ND((Follow-up
+        Directions))
     end
 
-    %% Main Flow
-    Q & FQ --> CQ[Combined Query]
-    CQ & B & D --> SQ
+    Q & B & D --> SQ
     SQ --> SR
-    SR --> RE
+    SR --> FI
+    FI --> SC
+    SC --> RE
     RE --> PR
-
-    %% Results Flow
     PR --> L
-    PR --> SM
     PR --> ND
 
-    %% Depth Decision and Recursion
     L & ND --> DP{depth > 0?}
     DP -->|Yes| SQ
-    
-    %% Final Output
     DP -->|No| MR[Markdown Report]
-
-    %% Styling
-    classDef input fill:#7bed9f,stroke:#2ed573,color:black
-    classDef process fill:#70a1ff,stroke:#1e90ff,color:black
-    classDef output fill:#ff4757,stroke:#ff6b81,color:black
-    classDef results fill:#a8e6cf,stroke:#3b7a57,color:black,width:150px,height:150px
-
-    class Q,B,D,FQ input
-    class SQ,SR,RE,PR process
-    class MR output
-    class L,SM,ND results
 ```
-## Advanced Setup
 
-### Using Local Firecrawl (Free Option)
+At each depth level, the server:
+1. Generates targeted search queries using the LLM
+2. Searches via SearXNG (deduplicates across engines)
+3. Filters out junk URLs before scraping
+4. Scrapes and converts pages to Markdown
+5. Evaluates each source's reliability (0-1 score)
+6. Extracts learnings weighted by source reliability
+7. Generates follow-up questions for the next depth level
 
-Instead of using the Firecrawl API, you can run a local instance. You can use the official repo or my fork which uses searXNG as the search backend to avoid using a searchapi key:
+The final report includes all learnings and a sources section sorted by reliability score.
 
-1. Set up local Firecrawl:
+## Deployment (Railway)
+
+Deploy as 3 services:
+
+| Service | Source | Key Env Vars |
+|---------|--------|-------------|
+| **Redis** | Railway plugin | Auto-provisioned |
+| **SearXNG** | Docker image: `ghcr.io/joeychilson/searxng-railway:latest` | `SEARXNG_SECRET_KEY`, `SEARXNG_REDIS_URL=${{Redis.REDIS_URL}}` |
+| **MCP Server** | This repo (auto-detected Dockerfile) | `SEARXNG_URL=http://searxng.railway.internal:8080`, `ANTHROPIC_API_KEY`, `PORT` (auto-set) |
+
+## Configuration
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ANTHROPIC_API_KEY` | Anthropic API key | — |
+| `OPENAI_API_KEY` | OpenAI API key | — |
+| `GOOGLE_API_KEY` | Google AI API key | — |
+| `XAI_API_KEY` | xAI API key | — |
+| `SEARXNG_URL` | SearXNG instance URL | `http://searxng.railway.internal:8080` |
+| `SEARXNG_ENGINES` | Comma-separated search engines | all enabled |
+| `SEARXNG_CATEGORIES` | Comma-separated categories | all |
+| `CONCURRENCY` | Max concurrent operations | `2` |
+| `CONTEXT_SIZE` | LLM context window (tokens) | `128000` |
+| `PORT` | HTTP server port | `3000` |
+
+### Observability (Optional)
+
+Track research flows with [Langfuse](https://langfuse.com/):
+
 ```bash
-git clone https://github.com/Ozamatash/localfirecrawl
-cd localfirecrawl
-# Follow setup in localfirecrawl README
+LANGFUSE_PUBLIC_KEY=pk-...
+LANGFUSE_SECRET_KEY=sk-...
+LANGFUSE_BASEURL=https://cloud.langfuse.com
 ```
-
-2. Update `.env.local`:
-```bash
-FIRECRAWL_BASE_URL="http://localhost:3002"
-```
-
-### Optional: Observability
-
-Add observability to track research flows, queries, and results using Langfuse:
-
-```bash
-# Add to .env.local
-LANGFUSE_PUBLIC_KEY="your_langfuse_public_key"
-LANGFUSE_SECRET_KEY="your_langfuse_secret_key"
-```
-
-The app works normally without observability if no Langfuse keys are provided.
 
 ## License
 
-MIT License
+MIT
