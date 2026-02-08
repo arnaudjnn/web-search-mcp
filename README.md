@@ -113,7 +113,7 @@ All examples below assume your server is running at `https://your-server.up.rail
 
 ```bash
 claude mcp add web-search \
-  --transport streamable-http \
+  --transport http \
   https://your-server.up.railway.app/mcp \
   --header "Authorization: Bearer your-api-key"
 ```
@@ -126,7 +126,7 @@ Add to `.mcp.json` at the root of any project to make the tool available to all 
 {
   "mcpServers": {
     "web-search": {
-      "type": "streamable-http",
+      "type": "http",
       "url": "https://your-server.up.railway.app/mcp",
       "headers": {
         "Authorization": "Bearer your-api-key"
@@ -142,7 +142,7 @@ Add to `.mcp.json` at the root of any project to make the tool available to all 
 {
   "mcpServers": {
     "web-search": {
-      "type": "streamable-http",
+      "type": "http",
       "url": "https://your-server.up.railway.app/mcp",
       "headers": {
         "Authorization": "Bearer your-api-key"
