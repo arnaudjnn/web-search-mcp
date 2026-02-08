@@ -19,6 +19,7 @@ const envSchema = z.object({
   SEARXNG_URL: z.string().default('http://searxng.railway.internal:8080'),
   SEARXNG_ENGINES: z.string().optional(),
   SEARXNG_CATEGORIES: z.string().optional(),
+  API_KEY: z.string().optional(),
   CONCURRENCY: z.string().transform(Number).default('2'),
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
@@ -42,6 +43,7 @@ export const Config = {
   xai: {
     apiKey: env.XAI_API_KEY,
   },
+  apiKey: env.API_KEY,
   searxng: {
     url: env.SEARXNG_URL,
     engines: env.SEARXNG_ENGINES,

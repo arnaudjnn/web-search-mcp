@@ -126,6 +126,29 @@ log('Environment check:', {
 const app = express();
 app.use(express.json());
 
+// API key auth middleware — skips /health
+app.use((req: Request, res: Response, next) => {
+  if (req.path === '/health') return next();
+
+  const apiKey = Config.apiKey;
+  if (!apiKey) return next(); // no key configured = open access
+
+  const provided =
+    req.headers.authorization?.replace(/^Bearer\s+/i, '') ||
+    (req.query.api_key as string);
+
+  if (provided !== apiKey) {
+    res.status(401).json({
+      jsonrpc: '2.0',
+      error: { code: -32001, message: 'Unauthorized: invalid or missing API key' },
+      id: null,
+    });
+    return;
+  }
+
+  next();
+});
+
 app.post('/mcp', async (req: Request, res: Response) => {
   const server = createServer();
   try {
