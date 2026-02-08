@@ -10,11 +10,13 @@ The server combines three responsibilities that were previously spread across 5+
 2. **Scrape** — fetches pages with Node's built-in `fetch`, cleans HTML with [cheerio](https://github.com/cheeriojs/cheerio), and converts to Markdown with [Turndown](https://github.com/mixmark-io/turndown)
 3. **Research** — uses an LLM (your choice of provider) to generate queries, evaluate source reliability, extract learnings, and write the final report
 
-```
-MCP Client (Claude, etc.) --> MCP Server --> SearXNG --> Redis
-                                  |
-                                  +--> fetch + cheerio + turndown (scraping)
-                                  +--> LLM API (reasoning)
+```mermaid
+graph LR
+    Client["MCP Client<br/>(Claude, Cursor, etc.)"] --> Server["MCP Server"]
+    Server --> SearXNG
+    SearXNG --> Redis
+    Server --> Scraper["Built-in Scraper<br/>fetch + cheerio + turndown"]
+    Server --> LLM["LLM API<br/>(Anthropic, OpenAI, etc.)"]
 ```
 
 The full stack deploys as **3 services**: Redis, SearXNG, and this MCP server.
@@ -24,6 +26,7 @@ The full stack deploys as **3 services**: Redis, SearXNG, and this MCP server.
 This project originally used [Firecrawl](https://github.com/mendableai/firecrawl) as middleware between SearXNG and the MCP server. Firecrawl is an excellent open-source web scraping platform, but its full stack (API server, workers, Playwright service, Redis, SearXNG) requires 5+ services to self-host.
 
 We took inspiration from Firecrawl's approach to:
+
 - **Search-then-scrape pipeline** — [Firecrawl's search controller](https://github.com/mendableai/firecrawl/blob/main/apps/api/src/controllers/v1/search.ts) first searches, then scrapes only relevant results
 - **HTML-to-Markdown conversion** — Firecrawl converts raw HTML into clean Markdown for LLM consumption, a pattern we replicate with cheerio + Turndown
 - **SearXNG as search backend** — Firecrawl's [self-hosted setup](https://github.com/mendableai/firecrawl/blob/main/SELF_HOST.md) uses SearXNG as a free, privacy-respecting search backend with no API key required
@@ -34,16 +37,17 @@ By integrating search and scraping directly into the MCP server, we eliminated t
 
 The server is **LLM-agnostic**. It uses the [Vercel AI SDK](https://sdk.vercel.ai/) and supports any of these providers:
 
-| Provider | Env Var | Default Model |
-|----------|---------|---------------|
-| Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-4-5` |
-| OpenAI | `OPENAI_API_KEY` | `gpt-5.2` |
-| Google | `GOOGLE_API_KEY` | `gemini-3-pro-preview` |
-| xAI | `XAI_API_KEY` | `grok-4-1-fast-reasoning` |
+| Provider  | Env Var             | Default Model             |
+| --------- | ------------------- | ------------------------- |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-4-5`         |
+| OpenAI    | `OPENAI_API_KEY`    | `gpt-5.2`                 |
+| Google    | `GOOGLE_API_KEY`    | `gemini-3-pro-preview`    |
+| xAI       | `XAI_API_KEY`       | `grok-4-1-fast-reasoning` |
 
 The caller selects the model per request via the `model` parameter (e.g. `"anthropic:claude-sonnet-4-5"`). You only need an API key for the provider you use.
 
 LLMs are used for:
+
 - Generating targeted search queries from the research topic
 - Filtering search results before scraping (removing junk/spam)
 - Evaluating source reliability (scoring 0-1 with reasoning)
@@ -96,13 +100,13 @@ docker compose up
 
 The server exposes a single MCP tool — **`deep-research`**:
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `query` | string (required) | The research topic |
-| `depth` | 1-5 | How many levels deep to recurse |
-| `breadth` | 1-5 | How many parallel queries per level |
-| `model` | string (optional) | e.g. `"anthropic:claude-sonnet-4-5"` |
-| `tokenBudget` | number (optional) | Soft cap on research-phase tokens |
+| Parameter           | Type              | Description                          |
+| ------------------- | ----------------- | ------------------------------------ |
+| `query`             | string (required) | The research topic                   |
+| `depth`             | 1-5               | How many levels deep to recurse      |
+| `breadth`           | 1-5               | How many parallel queries per level  |
+| `model`             | string (optional) | e.g. `"anthropic:claude-sonnet-4-5"` |
+| `tokenBudget`       | number (optional) | Soft cap on research-phase tokens    |
 | `sourcePreferences` | string (optional) | e.g. `"avoid SEO listicles, forums"` |
 
 ### Connecting to the Server
@@ -152,7 +156,6 @@ Add to `.mcp.json` at the root of any project to make the tool available to all 
 }
 ```
 
-
 ## How It Works
 
 ```mermaid
@@ -196,6 +199,7 @@ flowchart TB
 ```
 
 At each depth level, the server:
+
 1. Generates targeted search queries using the LLM
 2. Searches via SearXNG (deduplicates across engines)
 3. Filters out junk URLs before scraping
@@ -210,9 +214,9 @@ The final report includes all learnings and a sources section sorted by reliabil
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/arnaudjnn/web-search-mcp&referralCode=arnaudjnn)
 
-- Click the button — you'll see all 3 services listed (Redis, SearXNG, MCP Server)
+- Click **Deploy on Railway**: you'll see all 3 services listed (Redis, SearXNG, MCP Server)
 - Click **Configure** on the **mcp-server** service and add your `ANTHROPIC_API_KEY` (or another LLM provider key)
-- Click **Deploy** — Railway provisions everything and wires the services together automatically
+- Click **Deploy**: Railway provisions everything and wires the services together automatically
 
 ## Securing the MCP Endpoint
 
