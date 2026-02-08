@@ -124,6 +124,41 @@ Add to `.mcp.json` at the root of any project to make the tool available to all 
 }
 ```
 
+### Replace Claude Code's Built-in Web Search (Optional)
+
+By default, Claude Code uses its own `WebSearch` tool. You can replace it with this server's `web-search` tool for privacy-respecting, self-hosted search results.
+
+**1. Add the MCP server globally:**
+
+```bash
+claude mcp add web-search --scope user \
+  --transport http \
+  https://your-server.up.railway.app/mcp \
+  --header "Authorization: Bearer your-api-key"
+```
+
+**2. Disable the built-in `WebSearch`** by editing `~/.claude/settings.json`:
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "WebSearch"
+    ]
+  }
+}
+```
+
+**3. Guide Claude via `~/.claude/CLAUDE.md`** so it uses your tool:
+
+```markdown
+## Search
+- Use the web-search MCP tool for all web searches
+- Do not attempt to use the built-in WebSearch tool
+```
+
+**4. Verify** by running `/mcp` inside Claude Code to check the server is connected, then ask Claude to search for something.
+
 ## How Deep Research Works
 
 ```mermaid
