@@ -94,25 +94,84 @@ docker compose up
 
 ## Usage
 
-### As an MCP tool
+The server exposes a single MCP tool — **`deep-research`**:
 
-Connect any MCP client (Claude Desktop, etc.) to `http://localhost:3000/mcp`. The server exposes a single tool:
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | string (required) | The research topic |
+| `depth` | 1-5 | How many levels deep to recurse |
+| `breadth` | 1-5 | How many parallel queries per level |
+| `model` | string (optional) | e.g. `"anthropic:claude-sonnet-4-5"` |
+| `tokenBudget` | number (optional) | Soft cap on research-phase tokens |
+| `sourcePreferences` | string (optional) | e.g. `"avoid SEO listicles, forums"` |
 
-**`deep-research`** with parameters:
-- `query` (string, required) — the research topic
-- `depth` (1-5) — how many levels deep to recurse
-- `breadth` (1-5) — how many parallel queries per level
-- `model` (string, optional) — e.g. `"anthropic:claude-sonnet-4-5"`
-- `tokenBudget` (number, optional) — soft cap on research-phase tokens
-- `sourcePreferences` (string, optional) — e.g. `"avoid SEO listicles, forums"`
+### Connecting to the Server
 
-### As stdio MCP server (for Claude Desktop)
+All examples below assume your server is running at `https://your-server.up.railway.app/mcp` with an API key. Replace the URL and key with your own values.
+
+#### Claude Code (CLI)
+
+```bash
+claude mcp add web-search \
+  --transport streamable-http \
+  https://your-server.up.railway.app/mcp \
+  --header "Authorization: Bearer your-api-key"
+```
+
+#### Project-level config (`.mcp.json`)
+
+Add to `.mcp.json` at the root of any project to make the tool available to all collaborators:
+
+```json
+{
+  "mcpServers": {
+    "web-search": {
+      "type": "streamable-http",
+      "url": "https://your-server.up.railway.app/mcp",
+      "headers": {
+        "Authorization": "Bearer your-api-key"
+      }
+    }
+  }
+}
+```
+
+#### Claude Desktop (`claude_desktop_config.json`)
+
+```json
+{
+  "mcpServers": {
+    "web-search": {
+      "type": "streamable-http",
+      "url": "https://your-server.up.railway.app/mcp",
+      "headers": {
+        "Authorization": "Bearer your-api-key"
+      }
+    }
+  }
+}
+```
+
+#### Local stdio mode (no HTTP)
+
+If you prefer running the server locally via stdio instead of HTTP:
 
 ```bash
 pnpm run start:stdio
 ```
 
-Follow the [MCP server quickstart](https://modelcontextprotocol.io/quickstart/server) to add it to Claude Desktop.
+Then in Claude Desktop config:
+```json
+{
+  "mcpServers": {
+    "web-search": {
+      "command": "node",
+      "args": ["dist/mcp-server.js"],
+      "cwd": "/path/to/web-search-mcp"
+    }
+  }
+}
+```
 
 ### CLI mode
 
@@ -230,36 +289,7 @@ Clicking the button deploys the MCP server from this repo. You then need to add 
 
 ### Securing the MCP Endpoint
 
-In production, set the `API_KEY` environment variable to require authentication on all requests (except `/health`). When set, clients must provide the key via one of:
-
-**Bearer token (recommended):**
-```bash
-curl -X POST https://your-server.up.railway.app/mcp \
-  -H "Authorization: Bearer your-api-key" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json, text/event-stream" \
-  -d '{ ... }'
-```
-
-**Query parameter:**
-```
-https://your-server.up.railway.app/mcp?api_key=your-api-key
-```
-
-**MCP client configuration (Claude Desktop example):**
-```json
-{
-  "mcpServers": {
-    "web-search": {
-      "type": "streamable-http",
-      "url": "https://your-server.up.railway.app/mcp",
-      "headers": {
-        "Authorization": "Bearer your-api-key"
-      }
-    }
-  }
-}
-```
+Set the `API_KEY` environment variable to require authentication on all requests (except `/health`). Clients provide the key as a `Bearer` token in the `Authorization` header (shown in the examples above) or as an `?api_key=` query parameter.
 
 If `API_KEY` is not set, the server accepts all requests without authentication.
 
