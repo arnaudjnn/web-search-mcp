@@ -38,10 +38,10 @@ The server exposes two MCP tools:
 
 Lightweight web search via SearXNG. **No LLM API key required** — only needs SearXNG.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `query` | string (required) | The search query |
-| `limit` | number (optional) | Max results to return (default: 10, max: 20) |
+| Parameter | Type              | Description                                  |
+| --------- | ----------------- | -------------------------------------------- |
+| `query`   | string (required) | The search query                             |
+| `limit`   | number (optional) | Max results to return (default: 10, max: 20) |
 
 Returns a JSON array of `{ url, title, description }` results.
 
@@ -49,25 +49,25 @@ Returns a JSON array of `{ url, title, description }` results.
 
 AI-powered iterative research that searches, scrapes, evaluates sources, and writes a comprehensive report. **Requires an LLM API key** (Anthropic, OpenAI, Google, or xAI) for reasoning.
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `query` | string (required) | The research topic |
-| `depth` | 1-5 | How many levels deep to recurse |
-| `breadth` | 1-5 | How many parallel queries per level |
-| `model` | string (optional) | e.g. `"anthropic:claude-sonnet-4-5"` |
-| `tokenBudget` | number (optional) | Soft cap on research-phase tokens |
+| Parameter           | Type              | Description                          |
+| ------------------- | ----------------- | ------------------------------------ |
+| `query`             | string (required) | The research topic                   |
+| `depth`             | 1-5               | How many levels deep to recurse      |
+| `breadth`           | 1-5               | How many parallel queries per level  |
+| `model`             | string (optional) | e.g. `"anthropic:claude-sonnet-4-5"` |
+| `tokenBudget`       | number (optional) | Soft cap on research-phase tokens    |
 | `sourcePreferences` | string (optional) | e.g. `"avoid SEO listicles, forums"` |
 
 #### LLM Provider
 
 The `deep-research` tool is **LLM-agnostic**. It uses the [Vercel AI SDK](https://sdk.vercel.ai/) and supports:
 
-| Provider | Env Var | Default Model |
-|----------|---------|---------------|
-| Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-4-5` |
-| OpenAI | `OPENAI_API_KEY` | `gpt-5.2` |
-| Google | `GOOGLE_API_KEY` | `gemini-3-pro-preview` |
-| xAI | `XAI_API_KEY` | `grok-4-1-fast-reasoning` |
+| Provider  | Env Var             | Default Model             |
+| --------- | ------------------- | ------------------------- |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-4-5`         |
+| OpenAI    | `OPENAI_API_KEY`    | `gpt-5.2`                 |
+| Google    | `GOOGLE_API_KEY`    | `gemini-3-pro-preview`    |
+| xAI       | `XAI_API_KEY`       | `grok-4-1-fast-reasoning` |
 
 The caller selects the model per request via the `model` parameter. You only need an API key for the provider you use. The LLM is used for:
 
@@ -142,9 +142,7 @@ claude mcp add web-search --scope user \
 ```json
 {
   "permissions": {
-    "deny": [
-      "WebSearch"
-    ]
+    "deny": ["WebSearch"]
   }
 }
 ```
@@ -153,6 +151,7 @@ claude mcp add web-search --scope user \
 
 ```markdown
 ## Search
+
 - Use the web-search MCP tool for all web searches
 - Do not attempt to use the built-in WebSearch tool
 ```
@@ -217,9 +216,9 @@ The final report includes all learnings and a sources section sorted by reliabil
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/arnaudjnn/web-search-mcp&referralCode=arnaudjnn)
 
-- Click **Deploy on Railway** — you'll see all 3 services listed (Redis, SearXNG, MCP Server)
+- Click **Deploy on Railway**: you'll see all 3 services listed (Redis, SearXNG, MCP Server)
 - Click **Configure** on the **mcp-server** service and add your `ANTHROPIC_API_KEY` (or another LLM provider key)
-- Click **Deploy** — Railway provisions everything and wires the services together automatically
+- Click **Deploy**: Railway provisions everything and wires the services together automatically
 
 ## Quick Start (Local)
 
