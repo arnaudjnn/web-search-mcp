@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { Config } from './config.js';
 import { deepResearch, writeFinalReport } from './deep-research.js';
 import { getModel } from './ai/providers.js';
+import { searchSearXNG } from './searxng.js';
 
 // Helper function to log to stderr
 const log = (...args: any[]) => {
@@ -27,7 +28,40 @@ const server = new McpServer({
   version: '1.0.0',
 }, { capabilities: { logging: {} } });
 
-// Define the deep research tool
+// Web search tool — lightweight, no LLM needed
+server.tool(
+  'web-search',
+  'Search the web via SearXNG and return results. No LLM API key required.',
+  {
+    query: z.string().min(1).describe('The search query'),
+    limit: z.number().min(1).max(20).optional().describe('Max number of results (default: 10)'),
+  },
+  async ({ query, limit }) => {
+    try {
+      const results = await searchSearXNG(query, { limit: limit ?? 10 });
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(results.data, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Search error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+// Deep research tool — requires LLM API key
 server.tool(
   'deep-research',
   'Perform deep research on a topic using AI-powered web search',

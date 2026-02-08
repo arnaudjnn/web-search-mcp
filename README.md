@@ -96,17 +96,32 @@ The server is available at `http://localhost:3000/mcp`.
 docker compose up
 ```
 
-## Usage
+## Tools
 
-The server exposes a single MCP tool — **`deep-research`**:
+The server exposes two MCP tools:
 
-| Parameter           | Type              | Description                          |
-| ------------------- | ----------------- | ------------------------------------ |
-| `query`             | string (required) | The research topic                   |
-| `depth`             | 1-5               | How many levels deep to recurse      |
-| `breadth`           | 1-5               | How many parallel queries per level  |
-| `model`             | string (optional) | e.g. `"anthropic:claude-sonnet-4-5"` |
-| `tokenBudget`       | number (optional) | Soft cap on research-phase tokens    |
+### `web-search`
+
+Lightweight web search via SearXNG. **No LLM API key required** — only needs SearXNG.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | string (required) | The search query |
+| `limit` | number (optional) | Max results to return (default: 10, max: 20) |
+
+Returns a JSON array of `{ url, title, description }` results.
+
+### `deep-research`
+
+AI-powered iterative research that searches, scrapes, evaluates sources, and writes a comprehensive report. **Requires an LLM API key** (Anthropic, OpenAI, Google, or xAI) for reasoning.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `query` | string (required) | The research topic |
+| `depth` | 1-5 | How many levels deep to recurse |
+| `breadth` | 1-5 | How many parallel queries per level |
+| `model` | string (optional) | e.g. `"anthropic:claude-sonnet-4-5"` |
+| `tokenBudget` | number (optional) | Soft cap on research-phase tokens |
 | `sourcePreferences` | string (optional) | e.g. `"avoid SEO listicles, forums"` |
 
 ### Connecting to the Server
