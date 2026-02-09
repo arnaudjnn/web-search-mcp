@@ -244,56 +244,64 @@ Prefer authoritative, primary, and technical sources; avoid queries that are lik
   return validatedQueries;
 }
 
-async function evaluateSourceReliability({
-  item,
+async function evaluateSourcesReliability({
+  items,
   query,
   sourcePreferences,
   model,
   budget,
 }: {
-  item: { url?: string | null; title?: string | null; markdown?: string | null };
+  items: Array<{ url?: string | null; title?: string | null; markdown?: string | null }>;
   query: string;
   sourcePreferences?: string;
   model: LanguageModelV2;
   budget?: BudgetState;
-}): Promise<{ score: number; reasoning: string; use: boolean; preferenceReason?: string; domain: string }> {
-  const url = item.url || '';
-  const title = item.title || '';
-  let domain = '';
-  try {
-    domain = url ? new URL(url).hostname : '';
-  } catch {
-    domain = '';
-  }
-  const contentSnippet = trimPrompt(item.markdown || '', 4000);
+}): Promise<Array<{ score: number; reasoning: string; use: boolean; preferenceReason?: string; domain: string }>> {
+  if (items.length === 0) return [];
 
   const prefBlock = sourcePreferences && sourcePreferences.trim().length > 0
-    ? `User preferences to avoid (apply holistically, not via keywords):\n<preferences>${sourcePreferences}</preferences>\n\nAlso return whether this source should be USED given these preferences.`
+    ? `User preferences to avoid (apply holistically, not via keywords):\n<preferences>${sourcePreferences}</preferences>\n\nAlso return whether each source should be USED given these preferences.`
     : 'No special user preferences provided.';
+
+  const sourcesList = items.map((item, i) => {
+    const url = item.url || '';
+    const title = item.title || '';
+    let domain = '';
+    try { domain = url ? new URL(url).hostname : ''; } catch { domain = ''; }
+    const contentSnippet = trimPrompt(item.markdown || '', 3000);
+    return `[${i}] URL: ${url} | Domain: ${domain} | Title: ${title}\nContent (truncated):\n"""\n${contentSnippet}\n"""`;
+  }).join('\n\n');
 
   const res = await generateObject({
     model,
     system: systemPrompt(),
-    prompt: `Evaluate the reliability and suitability of this source for the research query. Provide a reliability score and a brief reasoning. If user preferences are provided, judge suitability holistically against them.
+    prompt: `Evaluate the reliability and suitability of each source for the research query. For each source, provide a reliability score (0-1) and brief reasoning.
 
 ${prefBlock}
 
 Research query:\n<query>${query}</query>
 
-Source:\n- URL: ${url}\n- Domain: ${domain}\n- Title: ${title}\n- Content (truncated):\n"""\n${contentSnippet}\n"""
-
-Return JSON: { "score": number (0..1), "reasoning": string, "use": boolean, "preferenceReason"?: string }`,
+Sources:\n${sourcesList}`,
     schema: z.object({
-      score: z.number(),
-      reasoning: z.string(),
-      use: z.boolean(),
-      preferenceReason: z.string().optional(),
+      evaluations: z.array(z.object({
+        index: z.number().describe('The index of the source'),
+        score: z.number().describe('Reliability score 0-1'),
+        reasoning: z.string(),
+        use: z.boolean(),
+        preferenceReason: z.string().optional(),
+      })),
     }),
   });
 
   recordUsage(budget, (res as any)?.usage);
 
-  return { score: res.object.score, reasoning: res.object.reasoning, use: res.object.use, preferenceReason: res.object.preferenceReason, domain };
+  return res.object.evaluations.map(ev => {
+    const item = items[ev.index];
+    const url = item?.url || '';
+    let domain = '';
+    try { domain = url ? new URL(url).hostname : ''; } catch { domain = ''; }
+    return { score: ev.score, reasoning: ev.reasoning, use: ev.use, preferenceReason: ev.preferenceReason, domain };
+  });
 }
 
 async function processSerpResult({
@@ -324,23 +332,28 @@ async function processSerpResult({
   sourceMetadata: SourceMetadata[];
   weightedLearnings: LearningWithReliability[];
 }> {
-  // Evaluate reliability and suitability per item; exclude any with use=false
-  const evaluations = await Promise.all(
-    compact(result.data).map(async item => {
-      if (!item.url) return null;
-      try {
-        const ev = await evaluateSourceReliability({ item, query, sourcePreferences, model, budget });
-        if (ev.use === false) return { excluded: true, item } as const;
-        return { excluded: false, item, ev } as const;
-      } catch {
-        // On error, keep the item to avoid over-filtering
-        return { excluded: false, item } as const;
-      }
-    }),
-  );
+  // Evaluate reliability and suitability in a single batched LLM call
+  const validItems = compact(result.data).filter(item => !!item.url);
+  let reliabilityResults: Array<{ score: number; reasoning: string; use: boolean; preferenceReason?: string; domain: string }> = [];
+  try {
+    reliabilityResults = await evaluateSourcesReliability({ items: validItems, query, sourcePreferences, model, budget });
+  } catch {
+    // On error, keep all items with default scores
+    reliabilityResults = validItems.map(item => {
+      let domain = '';
+      try { domain = item.url ? new URL(item.url).hostname : ''; } catch { domain = ''; }
+      return { score: 0.5, reasoning: 'Evaluation failed', use: true, domain };
+    });
+  }
 
-  const kept = evaluations.filter((r): r is { excluded: false; item: any; ev?: any } => !!r && r.excluded === false);
-  const excludedCount = evaluations.filter(r => r && (r as any).excluded === true).length;
+  const evaluations = validItems.map((item, i) => {
+    const ev = reliabilityResults[i];
+    if (ev && ev.use === false) return { excluded: true, item } as const;
+    return { excluded: false, item, ev } as const;
+  });
+
+  const kept = evaluations.filter((r): r is { excluded: false; item: any; ev?: any } => r.excluded === false);
+  const excludedCount = evaluations.filter(r => r.excluded === true).length;
 
   const contents = kept
     .map(r => r.item.markdown)

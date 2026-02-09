@@ -46,21 +46,20 @@ export async function filterSearchResults({
   budget?: BudgetState;
   limiter: LimitFunction;
 }): Promise<string[]> {
-  if (searchResults.length === 0) return [];
+  const validResults = searchResults.filter(r => !!r.url);
+  if (validResults.length === 0) return [];
 
-  const evaluations = await Promise.all(
-    searchResults.map((result) =>
-      limiter(async () => {
-        if (!result.url) return null;
-        const evaluation = await generateObject({
-          model,
-          system: systemPrompt(),
-          prompt: `Should we scrape this URL for: "${query}"?
+  // Batch all results into a single LLM call
+  const resultsList = validResults.map((result, i) =>
+    `[${i}] URL: ${result.url} | Domain: ${new URL(result.url).hostname} | Title: ${result.title || 'N/A'} | Description: ${result.description || 'N/A'}`
+  ).join('\n');
 
-URL: ${result.url}
-Domain: ${new URL(result.url).hostname}
-Title: ${result.title || 'N/A'}
-Description: ${result.description || 'N/A'}
+  const evaluation = await generateObject({
+    model,
+    system: systemPrompt(),
+    prompt: `Given these search results for the query "${query}", decide which URLs are worth scraping.
+
+${resultsList}
 
 ${sourcePreferences ? `User preferences to avoid:\n${sourcePreferences}\n` : ''}
 
@@ -71,20 +70,19 @@ ONLY filter out obvious junk:
 - Violates user preferences
 
 INCLUDE everything else - we'll evaluate properly after scraping.`,
-          schema: z.object({
-            shouldScrape: z.boolean(),
-            reasoning: z.string(),
-          }),
-        });
+    schema: z.object({
+      results: z.array(z.object({
+        index: z.number().describe('The index of the search result'),
+        shouldScrape: z.boolean(),
+      })),
+    }),
+  });
 
-        recordUsage(budget, (evaluation as any)?.usage);
+  recordUsage(budget, (evaluation as any)?.usage);
 
-        return evaluation.object.shouldScrape ? result.url : null;
-      })
-    )
-  );
-
-  return evaluations.filter((url): url is string => url !== null);
+  return evaluation.object.results
+    .filter(r => r.shouldScrape && validResults[r.index])
+    .map(r => validResults[r.index]!.url);
 }
 
 
