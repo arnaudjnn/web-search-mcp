@@ -32,14 +32,23 @@ function wrapWithLangfuse(model: any, modelName: string): LanguageModelV2 {
   return model as LanguageModelV2;
 }
 
+function detectDefaultProvider(): string {
+  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  if (process.env.OPENAI_API_KEY) return 'openai';
+  if (process.env.GOOGLE_API_KEY) return 'google';
+  if (process.env.XAI_API_KEY) return 'xai';
+  return 'anthropic';
+}
+
 export function getModel(modelSpecifier?: string): LanguageModelV2 {
-  // Accept formats like "openai:o4-mini-2025-04-16", "openai/o4-mini-2025-04-16", or just model name (defaults to openai)
+  // Accept formats like "openai:o4-mini-2025-04-16", "openai/o4-mini-2025-04-16", or just model name
   const spec = (modelSpecifier || '').trim();
   const hasProvider = spec.includes(':') || spec.includes('/');
+  const defaultProvider = detectDefaultProvider();
   const [providerRaw, nameRaw] = hasProvider
     ? spec.split(/[:/]/, 2)
-    : ['openai', spec];
-  const provider = (providerRaw || 'openai').toLowerCase();
+    : [defaultProvider, spec];
+  const provider = (providerRaw || defaultProvider).toLowerCase();
 
   // default names
   const defaults = {
@@ -87,7 +96,7 @@ export function getModel(modelSpecifier?: string): LanguageModelV2 {
 }
 
 export function getDefaultModel(): LanguageModelV2 {
-  return getModel(`openai:${process.env.OPENAI_MODEL || 'gpt-5.2'}`);
+  return getModel();
 }
 
 const MinChunkSize = 140;
