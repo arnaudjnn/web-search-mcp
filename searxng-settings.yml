@@ -28,6 +28,15 @@ search:
       shortcut: d
       use_mobile_ui: false
       disabled: false
+    - name: bing
+      shortcut: bi
+      disabled: false
+    - name: qwant
+      shortcut: qw
+      disabled: false
+    - name: mojeek
+      shortcut: mj
+      disabled: false
     - name: wikipedia
       shortcut: w
       use_mobile_ui: false
