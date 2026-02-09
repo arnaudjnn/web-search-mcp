@@ -214,7 +214,7 @@ The final report includes all learnings and a sources section sorted by reliabil
 
 ## Deployment (Railway)
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template?template=https://github.com/arnaudjnn/web-search-mcp&referralCode=arnaudjnn)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/3PPfYo?referralCode=L7pPO5&utm_medium=integration&utm_source=template&utm_campaign=generic)
 
 - Click **Deploy on Railway**: you'll see all 3 services listed (Redis, SearXNG, MCP Server)
 - Click **Configure** on the **mcp-server** service and add your `ANTHROPIC_API_KEY` (or another LLM provider key)
