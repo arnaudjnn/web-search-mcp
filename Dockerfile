@@ -25,4 +25,4 @@ RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/dist ./dist
 
-CMD ["node", "dist/http-server.js"]
+CMD ["node", "dist/mcp-server.js"]

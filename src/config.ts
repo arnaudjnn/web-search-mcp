@@ -21,6 +21,8 @@ const envSchema = z.object({
   SEARXNG_CATEGORIES: z.string().optional(),
   API_KEY: z.string().optional(),
   CONCURRENCY: z.string().transform(Number).default('2'),
+  CRAWL4AI_URL: z.string().default('http://crawl4ai.railway.internal:11235'),
+  CRAWL4AI_API_TOKEN: z.string().optional(),
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
 });
@@ -50,6 +52,10 @@ export const Config = {
     categories: env.SEARXNG_CATEGORIES,
   },
   concurrency: env.CONCURRENCY,
+  crawl4ai: {
+    url: env.CRAWL4AI_URL,
+    apiToken: env.CRAWL4AI_API_TOKEN,
+  },
   langfuse: {
     publicKey: env.LANGFUSE_PUBLIC_KEY,
     secretKey: env.LANGFUSE_SECRET_KEY,

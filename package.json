@@ -6,13 +6,10 @@
   "scripts": {
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "tsx": "tsx --env-file=.env.local",
-    "start": "tsx --env-file=.env.local src/run.ts",
-    "start:stdio": "tsx --env-file=.env.local src/mcp-server.ts",
-    "start:http": "tsx --env-file=.env.local src/http-server.ts",
+    "start": "tsx --env-file=.env.local src/mcp-server.ts",
     "build": "tsc",
     "build:watch": "tsc --watch",
     "serve": "node --env-file=.env.local dist/mcp-server.js",
-    "serve:http": "node --env-file=.env.local dist/http-server.js",
     "docker": "tsx src/run.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
