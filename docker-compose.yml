@@ -23,14 +23,13 @@ services:
     environment:
       - CRAWL4AI_API_TOKEN=${CRAWL4AI_API_TOKEN:-}
 
-  deep-research:
+  web-search:
     build: .
     ports:
       - "3000:3000"
     environment:
       - SEARXNG_URL=http://searxng:8080
       - CRAWL4AI_URL=http://crawl4ai:11235
-      - CONCURRENCY=2
       - PORT=3000
     env_file:
       - .env.local

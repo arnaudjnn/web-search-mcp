@@ -21,7 +21,7 @@ async function getClient(): Promise<Client> {
       requestInit: { headers },
     });
 
-    const c = new Client({ name: 'deep-research-crawl4ai-proxy', version: '1.0.0' });
+    const c = new Client({ name: 'web-search-crawl4ai-proxy', version: '1.0.0' });
 
     transport.onerror = (err) => {
       process.stderr.write(`Crawl4AI transport error: ${err.message}\n`);
