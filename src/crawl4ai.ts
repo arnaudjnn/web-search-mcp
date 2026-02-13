@@ -1,5 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { Config } from './config.js';
 
 let client: Client | null = null;
@@ -10,13 +10,14 @@ async function getClient(): Promise<Client> {
   if (connecting) return connecting;
 
   connecting = (async () => {
-    const url = new URL('/mcp', Config.crawl4ai.url);
+    const url = new URL('/mcp/sse', Config.crawl4ai.url);
     const headers: Record<string, string> = {};
     if (Config.crawl4ai.apiToken) {
       headers['Authorization'] = `Bearer ${Config.crawl4ai.apiToken}`;
     }
 
-    const transport = new StreamableHTTPClientTransport(url, {
+    const transport = new SSEClientTransport(url, {
+      eventSourceInit: { fetch: (url, init) => fetch(url, { ...init, headers: { ...headers, ...(init?.headers as Record<string, string>) } }) },
       requestInit: { headers },
     });
 
