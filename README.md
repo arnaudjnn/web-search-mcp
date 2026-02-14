@@ -1,25 +1,26 @@
 # Web Search MCP
 
-An [MCP](https://modelcontextprotocol.io/) server that provides two tools: a fast **web search** powered by [SearXNG](https://github.com/searxng/searxng), and a **crawl** tool powered by [Crawl4AI](https://github.com/unclecode/crawl4ai) to extract content from web pages.
+An [MCP](https://modelcontextprotocol.io/) server that provides three tools: a fast **web search** powered by [SearXNG](https://github.com/searxng/searxng), a **web-fetch** tool to grab a single page as clean markdown, and a **web-crawl** tool powered by [Crawl4AI](https://github.com/unclecode/crawl4ai) to extract content from web pages.
 
 ## Architecture
 
 ```mermaid
 graph LR
     Client["MCP Client<br/>(Claude, Cursor, etc.)"] -->|web-search| Server["MCP Server"]
-    Client -->|crawl| Server
+    Client -->|web-fetch| Server
+    Client -->|web-crawl| Server
     Server --> SearXNG
     SearXNG --> Redis
     Server --> Crawl4AI
 ```
 
-The `web-search` tool queries SearXNG for search results. The `crawl` tool fetches and extracts page content via Crawl4AI.
+The `web-search` tool queries SearXNG for search results. The `web-fetch` and `web-crawl` tools fetch and extract page content via Crawl4AI.
 
 The full stack deploys as **4 services**: Redis, SearXNG, Crawl4AI, and this MCP server.
 
 ## Tools
 
-The server exposes two MCP tools:
+The server exposes three MCP tools:
 
 ### `web-search`
 
@@ -32,7 +33,19 @@ Lightweight web search via SearXNG. Returns structured results with no LLM requi
 
 Returns a JSON array of `{ url, title, description }` results.
 
-### `crawl`
+### `web-fetch`
+
+Fetch a single URL and return its content as clean markdown via Crawl4AI.
+
+| Parameter | Type              | Description                                              |
+| --------- | ----------------- | -------------------------------------------------------- |
+| `url`     | string (required) | URL to fetch                                             |
+| `f`       | enum (optional)   | Content-filter strategy: `raw`, `fit`, `bm25`, or `llm` (default: `fit`) |
+| `q`       | string (optional) | Query string for BM25/LLM filters                       |
+
+Returns the page content as markdown.
+
+### `web-crawl`
 
 Crawl one or more URLs and extract their content using Crawl4AI.
 

@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 import { Config } from './config.js';
 import { searchSearXNG } from './searxng.js';
-import { callCrawlTool } from './crawl4ai.js';
+import { callCrawlTool, callMdTool } from './crawl4ai.js';
 
 // Helper function to log to stderr
 const log = (...args: any[]) => {
@@ -56,9 +56,36 @@ function createServer(): McpServer {
     },
   );
 
+  // Web-fetch tool — proxy to Crawl4AI md tool
+  server.tool(
+    'web-fetch',
+    'Fetch a URL and return its content as clean markdown via Crawl4AI',
+    {
+      url: z.string().url().describe('URL to fetch'),
+      f: z.enum(['raw', 'fit', 'bm25', 'llm']).optional().describe('Content-filter strategy (default: fit)'),
+      q: z.string().optional().describe('Query string for BM25/LLM filters'),
+    },
+    async (args) => {
+      try {
+        const result = await callMdTool(args);
+        return result as { content: { type: "text"; text: string }[] };
+      } catch (error) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Fetch error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
   // Crawl tool — proxy to Crawl4AI MCP server
   server.tool(
-    'crawl',
+    'web-crawl',
     'Crawl one or more URLs and extract their content using Crawl4AI',
     {
       urls: z.array(z.string().url()).min(1).describe('List of URLs to crawl'),

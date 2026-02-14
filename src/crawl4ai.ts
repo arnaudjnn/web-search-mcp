@@ -54,3 +54,14 @@ export async function callCrawlTool(args: Record<string, unknown>) {
     throw err;
   }
 }
+
+export async function callMdTool(args: Record<string, unknown>) {
+  const c = await getClient();
+  try {
+    return await c.callTool({ name: 'md', arguments: args });
+  } catch (err) {
+    client = null;
+    connecting = null;
+    throw err;
+  }
+}
