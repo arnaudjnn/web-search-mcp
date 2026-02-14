@@ -139,9 +139,9 @@ Add to `.mcp.json` at the root of any project to make the tool available to all 
 }
 ```
 
-### Replace Claude Code's Built-in Web Search (Optional)
+### Replace Claude Code's Built-in Web Search & Web Fetch (Optional)
 
-By default, Claude Code uses its own `WebSearch` tool. You can replace it with this server's `web-search` tool for privacy-respecting, self-hosted search results.
+By default, Claude Code uses its own `WebSearch` and `WebFetch` tools. You can replace them with this server's `web-search` and `web-fetch` tools for privacy-respecting, self-hosted results.
 
 **1. Add the MCP server globally:**
 
@@ -152,26 +152,27 @@ claude mcp add web-search --scope user \
   --header "Authorization: Bearer your-api-key"
 ```
 
-**2. Disable the built-in `WebSearch`** by editing `~/.claude/settings.json`:
+**2. Disable the built-in tools** by editing `~/.claude/settings.json`:
 
 ```json
 {
   "permissions": {
-    "deny": ["WebSearch"]
+    "deny": ["WebSearch", "WebFetch"]
   }
 }
 ```
 
-**3. Guide Claude via `~/.claude/CLAUDE.md`** so it uses your tool:
+**3. Guide Claude via `~/.claude/CLAUDE.md`** so it uses your tools:
 
 ```markdown
-## Search
+## Search & Fetch
 
 - Use the web-search MCP tool for all web searches
-- Do not attempt to use the built-in WebSearch tool
+- Use the web-fetch MCP tool to fetch and read web pages
+- Do not attempt to use the built-in WebSearch or WebFetch tools
 ```
 
-**4. Verify** by running `/mcp` inside Claude Code to check the server is connected, then ask Claude to search for something.
+**4. Verify** by running `/mcp` inside Claude Code to check the server is connected, then ask Claude to search for something or fetch a URL.
 
 ## Deployment (Railway)
 
