@@ -278,12 +278,8 @@ app.use((req: Request, res: Response, next) => {
 
   if (provided !== Config.apiKey) {
     res.status(401).json({
-      jsonrpc: '2.0',
-      error: {
-        code: -32001,
-        message: 'Unauthorized: invalid or missing API key',
-      },
-      id: null,
+      error: 'unauthorized',
+      error_description: 'Invalid or missing API key',
     });
     return;
   }
