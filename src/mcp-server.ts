@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { Config } from './config.js';
 import { callCrawlTool, callMdTool, callScreenshotTool, callPdfTool, callExecuteJsTool } from './crawl4ai.js';
 import { searchSearXNG } from './searxng.js';
+import { getSnapshots, getArchivedPage } from './wayback.js';
 
 // Helper function to log to stderr
 const log = (...args: any[]) => {
@@ -198,6 +199,58 @@ function createServer(): McpServer {
               text: `Crawl error: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // Snapshots tool — Wayback Machine CDX API
+  server.tool(
+    'web-snapshots',
+    'List Wayback Machine snapshots for a URL',
+    {
+      url: z.string().describe('URL to check for snapshots'),
+      from: z.string().optional().describe('Start date in YYYYMMDD format'),
+      to: z.string().optional().describe('End date in YYYYMMDD format'),
+      limit: z.number().optional().describe('Max number of snapshots to return (default: 100)'),
+      match_type: z.enum(['exact', 'prefix', 'host', 'domain']).optional().describe('URL matching strategy (default: exact)'),
+    },
+    async ({ url, from, to, limit, match_type }) => {
+      try {
+        const snapshots = await getSnapshots({ url, from, to, limit, matchType: match_type });
+        if (snapshots.length === 0) {
+          return { content: [{ type: 'text', text: `No snapshots found for URL: ${url}` }] };
+        }
+        return { content: [{ type: 'text', text: JSON.stringify(snapshots, null, 2) }] };
+      } catch (error) {
+        return {
+          content: [{ type: 'text' as const, text: `Snapshots error: ${error instanceof Error ? error.message : String(error)}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // Archive tool — Wayback Machine page retrieval
+  server.tool(
+    'web-archive',
+    'Retrieve an archived page from the Wayback Machine',
+    {
+      url: z.string().describe('URL of the page to retrieve'),
+      timestamp: z.string().describe('Timestamp in YYYYMMDDHHMMSS format'),
+      original: z.boolean().optional().describe('Get original content without Wayback Machine banner (default: false)'),
+    },
+    async ({ url, timestamp, original }) => {
+      try {
+        const { waybackUrl, content } = await getArchivedPage({ url, timestamp, original });
+        const MAX_LENGTH = 50000;
+        const truncated = content.length > MAX_LENGTH;
+        const text = `Wayback URL: ${waybackUrl}\nContent length: ${content.length} characters\n\n${truncated ? content.substring(0, MAX_LENGTH) + '\n\n[Content truncated]' : content}`;
+        return { content: [{ type: 'text', text }] };
+      } catch (error) {
+        return {
+          content: [{ type: 'text' as const, text: `Archive error: ${error instanceof Error ? error.message : String(error)}` }],
           isError: true,
         };
       }

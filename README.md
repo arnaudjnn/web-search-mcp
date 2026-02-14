@@ -1,6 +1,6 @@
 # Web Search MCP
 
-An [MCP](https://modelcontextprotocol.io/) server that provides six tools: a fast **web search** powered by [SearXNG](https://github.com/searxng/searxng), and five [Crawl4AI](https://github.com/unclecode/crawl4ai)-powered tools — **web-fetch** (markdown), **web-screenshot** (PNG), **web-pdf** (PDF), **web-execute-js** (JS execution), and **web-crawl** (multi-URL crawl).
+An [MCP](https://modelcontextprotocol.io/) server that provides eight tools: a fast **web search** powered by [SearXNG](https://github.com/searxng/searxng), five [Crawl4AI](https://github.com/unclecode/crawl4ai)-powered tools — **web-fetch** (markdown), **web-screenshot** (PNG), **web-pdf** (PDF), **web-execute-js** (JS execution), **web-crawl** (multi-URL crawl) — and two [Wayback Machine](https://web.archive.org/) tools — **web-snapshots** and **web-archive**.
 
 ## Architecture
 
@@ -12,22 +12,25 @@ graph LR
     Client -->|web-pdf| Server
     Client -->|web-execute-js| Server
     Client -->|web-crawl| Server
+    Client -->|web-snapshots| Server
+    Client -->|web-archive| Server
     Server --> SearXNG
     SearXNG --> Redis
     Server --> Crawl4AI
+    Server --> Wayback["Wayback Machine"]
 ```
 
-The `web-search` tool queries SearXNG for search results. The remaining tools proxy Crawl4AI for content extraction, screenshots, PDFs, JS execution, and multi-URL crawling.
+The `web-search` tool queries SearXNG for search results. The Crawl4AI tools handle content extraction, screenshots, PDFs, JS execution, and multi-URL crawling. The Wayback Machine tools list and retrieve archived pages.
 
 The full stack deploys as **4 services**: Redis, SearXNG, Crawl4AI, and this MCP server.
 
 ## Tools
 
-The server exposes six MCP tools:
+The server exposes eight MCP tools:
 
 ### `web-search`
 
-Lightweight web search via SearXNG. Returns structured results with no LLM required.
+Lightweight web search via SearXNG. Returns structured results.
 
 | Parameter | Type              | Description                                  |
 | --------- | ----------------- | -------------------------------------------- |
@@ -40,11 +43,11 @@ Returns a JSON array of `{ url, title, description }` results.
 
 Fetch a single URL and return its content as clean markdown via Crawl4AI.
 
-| Parameter | Type              | Description                                              |
-| --------- | ----------------- | -------------------------------------------------------- |
-| `url`     | string (required) | URL to fetch                                             |
+| Parameter | Type              | Description                                                              |
+| --------- | ----------------- | ------------------------------------------------------------------------ |
+| `url`     | string (required) | URL to fetch                                                             |
 | `f`       | enum (optional)   | Content-filter strategy: `raw`, `fit`, `bm25`, or `llm` (default: `fit`) |
-| `q`       | string (optional) | Query string for BM25/LLM filters                       |
+| `q`       | string (optional) | Query string for BM25/LLM filters                                        |
 
 Returns the page content as markdown.
 
@@ -52,10 +55,10 @@ Returns the page content as markdown.
 
 Capture a full-page PNG screenshot of a URL via Crawl4AI.
 
-| Parameter             | Type              | Description                                    |
-| --------------------- | ----------------- | ---------------------------------------------- |
-| `url`                 | string (required) | URL to screenshot                              |
-| `screenshot_wait_for` | number (optional) | Seconds to wait before capture (default: 2)    |
+| Parameter             | Type              | Description                                 |
+| --------------------- | ----------------- | ------------------------------------------- |
+| `url`                 | string (required) | URL to screenshot                           |
+| `screenshot_wait_for` | number (optional) | Seconds to wait before capture (default: 2) |
 
 Returns a base64-encoded PNG image.
 
@@ -63,8 +66,8 @@ Returns a base64-encoded PNG image.
 
 Generate a PDF document of a URL via Crawl4AI.
 
-| Parameter | Type              | Description          |
-| --------- | ----------------- | -------------------- |
+| Parameter | Type              | Description           |
+| --------- | ----------------- | --------------------- |
 | `url`     | string (required) | URL to convert to PDF |
 
 Returns a base64-encoded PDF.
@@ -73,10 +76,10 @@ Returns a base64-encoded PDF.
 
 Execute JavaScript snippets on a URL via Crawl4AI and return the full crawl result.
 
-| Parameter | Type               | Description                                       |
-| --------- | ------------------ | ------------------------------------------------- |
-| `url`     | string (required)  | URL to execute scripts on                         |
-| `scripts` | string[] (required)| List of JavaScript snippets to execute in order   |
+| Parameter | Type                | Description                                     |
+| --------- | ------------------- | ----------------------------------------------- |
+| `url`     | string (required)   | URL to execute scripts on                       |
+| `scripts` | string[] (required) | List of JavaScript snippets to execute in order |
 
 Returns the full CrawlResult JSON including markdown, links, media, and JS execution results.
 
@@ -84,13 +87,39 @@ Returns the full CrawlResult JSON including markdown, links, media, and JS execu
 
 Crawl one or more URLs and extract their content using Crawl4AI.
 
-| Parameter        | Type              | Description                                  |
-| ---------------- | ----------------- | -------------------------------------------- |
-| `urls`           | string[] (required) | List of URLs to crawl                      |
-| `browser_config` | object (optional) | Crawl4AI browser configuration               |
-| `crawler_config` | object (optional) | Crawl4AI crawler configuration               |
+| Parameter        | Type                | Description                    |
+| ---------------- | ------------------- | ------------------------------ |
+| `urls`           | string[] (required) | List of URLs to crawl          |
+| `browser_config` | object (optional)   | Crawl4AI browser configuration |
+| `crawler_config` | object (optional)   | Crawl4AI crawler configuration |
 
 Returns the extracted content from each URL.
+
+### `web-snapshots`
+
+List Wayback Machine snapshots for a URL.
+
+| Parameter    | Type              | Description                                                             |
+| ------------ | ----------------- | ----------------------------------------------------------------------- |
+| `url`        | string (required) | URL to check for snapshots                                              |
+| `from`       | string (optional) | Start date in YYYYMMDD format                                           |
+| `to`         | string (optional) | End date in YYYYMMDD format                                             |
+| `limit`      | number (optional) | Max number of snapshots to return (default: 100)                        |
+| `match_type` | enum (optional)   | URL matching: `exact`, `prefix`, `host`, or `domain` (default: `exact`) |
+
+Returns a JSON array of snapshots with timestamps, status codes, and archive URLs.
+
+### `web-archive`
+
+Retrieve an archived page from the Wayback Machine.
+
+| Parameter   | Type               | Description                                                          |
+| ----------- | ------------------ | -------------------------------------------------------------------- |
+| `url`       | string (required)  | URL of the page to retrieve                                          |
+| `timestamp` | string (required)  | Timestamp in YYYYMMDDHHMMSS format                                   |
+| `original`  | boolean (optional) | Get original content without Wayback Machine banner (default: false)  |
+
+Returns the archived page content.
 
 ### Connecting to the Server
 
