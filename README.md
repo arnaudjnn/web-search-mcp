@@ -117,7 +117,7 @@ Retrieve an archived page from the Wayback Machine.
 | ----------- | ------------------ | -------------------------------------------------------------------- |
 | `url`       | string (required)  | URL of the page to retrieve                                          |
 | `timestamp` | string (required)  | Timestamp in YYYYMMDDHHMMSS format                                   |
-| `original`  | boolean (optional) | Get original content without Wayback Machine banner (default: false)  |
+| `original`  | boolean (optional) | Get original content without Wayback Machine banner (default: false) |
 
 Returns the archived page content.
 
@@ -249,7 +249,7 @@ docker compose up
 
 ## Authentication
 
-The `API_KEY` environment variable is **required**. The server will not start without it.
+The `API_KEY` environment variable is **required**.
 
 On Railway, the key is auto-generated at deploy time (via `${{secret()}}`). For local development, set it in your `.env.local` file.
 
