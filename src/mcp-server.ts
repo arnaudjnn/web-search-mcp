@@ -277,8 +277,8 @@ app.use((req: Request, res: Response, next) => {
     (req.query.api_key as string);
 
   if (provided !== Config.apiKey) {
-    res.status(401).json({
-      error: 'unauthorized',
+    res.status(403).json({
+      error: 'forbidden',
       error_description: 'Invalid or missing API key',
     });
     return;
