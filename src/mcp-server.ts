@@ -272,14 +272,11 @@ app.use(express.json());
 app.use((req: Request, res: Response, next) => {
   if (req.path === '/health') return next();
 
-  const apiKey = Config.apiKey;
-  if (!apiKey) return next(); // no key configured = open access
-
   const provided =
     req.headers.authorization?.replace(/^Bearer\s+/i, '') ||
     (req.query.api_key as string);
 
-  if (provided !== apiKey) {
+  if (provided !== Config.apiKey) {
     res.status(401).json({
       jsonrpc: '2.0',
       error: {

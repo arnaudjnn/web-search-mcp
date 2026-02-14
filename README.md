@@ -209,6 +209,7 @@ claude mcp add web-search --scope user \
 
 - Click **Deploy on Railway**: you'll see all 4 services listed (Redis, SearXNG, Crawl4AI, MCP Server)
 - Click **Deploy**: Railway provisions everything and wires the services together automatically
+- An `API_KEY` is **auto-generated** during deployment. Find it in your MCP Server service's **Variables** tab and use it as your Bearer token
 
 ## Quick Start (Local)
 
@@ -246,11 +247,13 @@ The server is available at `http://localhost:3000/mcp`.
 docker compose up
 ```
 
-## Securing the MCP Endpoint
+## Authentication
 
-Set the `API_KEY` environment variable to require authentication on all requests (except `/health`). Clients provide the key as a `Bearer` token in the `Authorization` header (shown in the examples above) or as an `?api_key=` query parameter.
+The `API_KEY` environment variable is **required**. The server will not start without it.
 
-If `API_KEY` is not set, the server accepts all requests without authentication.
+On Railway, the key is auto-generated at deploy time (via `${{secret()}}`). For local development, set it in your `.env.local` file.
+
+Clients provide the key as a `Bearer` token in the `Authorization` header (shown in the examples above) or as an `?api_key=` query parameter. The `/health` endpoint is unauthenticated.
 
 ## License
 
