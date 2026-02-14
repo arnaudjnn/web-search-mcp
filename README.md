@@ -205,7 +205,7 @@ claude mcp add web-search --scope user \
 
 ## Deployment (Railway)
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/DO6dxz?referralCode=zMTz_F&utm_medium=integration&utm_source=template&utm_campaign=generic)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/URtL__?referralCode=zMTz_F&utm_medium=integration&utm_source=template&utm_campaign=generic)
 
 - Click **Deploy on Railway**: you'll see all 4 services listed (Redis, SearXNG, Crawl4AI, MCP Server)
 - Click **Deploy**: Railway provisions everything and wires the services together automatically
