@@ -1,6 +1,6 @@
 # Web Search MCP
 
-An [MCP](https://modelcontextprotocol.io/) server that provides three tools: a fast **web search** powered by [SearXNG](https://github.com/searxng/searxng), a **web-fetch** tool to grab a single page as clean markdown, and a **web-crawl** tool powered by [Crawl4AI](https://github.com/unclecode/crawl4ai) to extract content from web pages.
+An [MCP](https://modelcontextprotocol.io/) server that provides six tools: a fast **web search** powered by [SearXNG](https://github.com/searxng/searxng), and five [Crawl4AI](https://github.com/unclecode/crawl4ai)-powered tools — **web-fetch** (markdown), **web-screenshot** (PNG), **web-pdf** (PDF), **web-execute-js** (JS execution), and **web-crawl** (multi-URL crawl).
 
 ## Architecture
 
@@ -8,19 +8,22 @@ An [MCP](https://modelcontextprotocol.io/) server that provides three tools: a f
 graph LR
     Client["MCP Client<br/>(Claude, Cursor, etc.)"] -->|web-search| Server["MCP Server"]
     Client -->|web-fetch| Server
+    Client -->|web-screenshot| Server
+    Client -->|web-pdf| Server
+    Client -->|web-execute-js| Server
     Client -->|web-crawl| Server
     Server --> SearXNG
     SearXNG --> Redis
     Server --> Crawl4AI
 ```
 
-The `web-search` tool queries SearXNG for search results. The `web-fetch` and `web-crawl` tools fetch and extract page content via Crawl4AI.
+The `web-search` tool queries SearXNG for search results. The remaining tools proxy Crawl4AI for content extraction, screenshots, PDFs, JS execution, and multi-URL crawling.
 
 The full stack deploys as **4 services**: Redis, SearXNG, Crawl4AI, and this MCP server.
 
 ## Tools
 
-The server exposes three MCP tools:
+The server exposes six MCP tools:
 
 ### `web-search`
 
@@ -44,6 +47,38 @@ Fetch a single URL and return its content as clean markdown via Crawl4AI.
 | `q`       | string (optional) | Query string for BM25/LLM filters                       |
 
 Returns the page content as markdown.
+
+### `web-screenshot`
+
+Capture a full-page PNG screenshot of a URL via Crawl4AI.
+
+| Parameter             | Type              | Description                                    |
+| --------------------- | ----------------- | ---------------------------------------------- |
+| `url`                 | string (required) | URL to screenshot                              |
+| `screenshot_wait_for` | number (optional) | Seconds to wait before capture (default: 2)    |
+
+Returns a base64-encoded PNG image.
+
+### `web-pdf`
+
+Generate a PDF document of a URL via Crawl4AI.
+
+| Parameter | Type              | Description          |
+| --------- | ----------------- | -------------------- |
+| `url`     | string (required) | URL to convert to PDF |
+
+Returns a base64-encoded PDF.
+
+### `web-execute-js`
+
+Execute JavaScript snippets on a URL via Crawl4AI and return the full crawl result.
+
+| Parameter | Type               | Description                                       |
+| --------- | ------------------ | ------------------------------------------------- |
+| `url`     | string (required)  | URL to execute scripts on                         |
+| `scripts` | string[] (required)| List of JavaScript snippets to execute in order   |
+
+Returns the full CrawlResult JSON including markdown, links, media, and JS execution results.
 
 ### `web-crawl`
 

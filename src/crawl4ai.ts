@@ -65,3 +65,36 @@ export async function callMdTool(args: Record<string, unknown>) {
     throw err;
   }
 }
+
+export async function callScreenshotTool(args: Record<string, unknown>) {
+  const c = await getClient();
+  try {
+    return await c.callTool({ name: 'screenshot', arguments: args });
+  } catch (err) {
+    client = null;
+    connecting = null;
+    throw err;
+  }
+}
+
+export async function callPdfTool(args: Record<string, unknown>) {
+  const c = await getClient();
+  try {
+    return await c.callTool({ name: 'pdf', arguments: args });
+  } catch (err) {
+    client = null;
+    connecting = null;
+    throw err;
+  }
+}
+
+export async function callExecuteJsTool(args: Record<string, unknown>) {
+  const c = await getClient();
+  try {
+    return await c.callTool({ name: 'execute_js', arguments: args });
+  } catch (err) {
+    client = null;
+    connecting = null;
+    throw err;
+  }
+}
