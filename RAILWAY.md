@@ -1,4 +1,4 @@
-# Deploy and Host Web Search MCP (Open Source Alternative To Firecrawl, Linkup, Tavily, Exa or Bright Data) on Railway
+# Deploy and Host Web Search MCP on Railway
 
 Web Search MCP is an open-source [MCP](https://modelcontextprotocol.io/) server that gives AI agents eight tools to search, fetch, screenshot, crawl, and archive the web. It consumes zero LLM tokens for web access, so your models spend their budget on reasoning, not searching. The web has always been free for humans, so why should AI agents have to pay per query?
 
