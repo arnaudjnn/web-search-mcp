@@ -1,6 +1,6 @@
 # Web Search MCP
 
-An [MCP](https://modelcontextprotocol.io/) server that provides eight tools: a fast **web search** powered by [SearXNG](https://github.com/searxng/searxng), five [Crawl4AI](https://github.com/unclecode/crawl4ai)-powered tools — **web-fetch** (markdown), **web-screenshot** (PNG), **web-pdf** (PDF), **web-execute-js** (JS execution), **web-crawl** (multi-URL crawl) — and two [Wayback Machine](https://web.archive.org/) tools — **web-snapshots** and **web-archive**.
+An [MCP](https://modelcontextprotocol.io/) server that provides eight tools: a fast **web search** powered by [SearXNG](https://github.com/searxng/searxng), five [Crawl4AI](https://github.com/unclecode/crawl4ai)-powered tools (**web-fetch**, **web-screenshot**, **web-pdf**, **web-execute-js**, **web-crawl**), and two [Wayback Machine](https://web.archive.org/) tools (**web-snapshots**, **web-archive**).
 
 ## Architecture
 
