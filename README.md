@@ -106,6 +106,7 @@ List Wayback Machine snapshots for a URL.
 | `to`         | string (optional) | End date in YYYYMMDD format                                             |
 | `limit`      | number (optional) | Max number of snapshots to return (default: 100)                        |
 | `match_type` | enum (optional)   | URL matching: `exact`, `prefix`, `host`, or `domain` (default: `exact`) |
+| `filter`     | string[] (optional) | CDX API filters (e.g. `["statuscode:200", "mimetype:text/html"]`)      |
 
 Returns a JSON array of snapshots with timestamps, status codes, and archive URLs.
 

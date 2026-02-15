@@ -1,3 +1,5 @@
+import { callMdTool } from './crawl4ai.js';
+
 const CDX_API_URL = 'https://web.archive.org/cdx/search/cdx';
 const WAYBACK_BASE_URL = 'https://web.archive.org/web';
 
@@ -23,8 +25,9 @@ export async function getSnapshots(params: {
   to?: string;
   limit?: number;
   matchType?: 'exact' | 'prefix' | 'host' | 'domain';
+  filter?: string[];
 }): Promise<SnapshotInfo[]> {
-  const { url, from, to, limit = 100, matchType = 'exact' } = params;
+  const { url, from, to, limit = 100, matchType = 'exact', filter } = params;
 
   const qs = new URLSearchParams({
     url,
@@ -36,6 +39,9 @@ export async function getSnapshots(params: {
   if (from) qs.set('from', from);
   if (to) qs.set('to', to);
   if (matchType !== 'exact') qs.set('matchType', matchType);
+  if (filter) {
+    for (const f of filter) qs.append('filter', f);
+  }
 
   const res = await fetch(`${CDX_API_URL}?${qs}`);
   if (!res.ok) throw new Error(`Wayback CDX API error: ${res.status} ${res.statusText}`);
@@ -72,9 +78,13 @@ export async function getArchivedPage(params: {
   const prefix = original ? 'id_' : '';
   const waybackUrl = `${WAYBACK_BASE_URL}/${prefix}${timestamp}/${url}`;
 
-  const res = await fetch(waybackUrl);
-  if (!res.ok) throw new Error(`Wayback Machine error: ${res.status} ${res.statusText}`);
+  // Use Crawl4AI with a fresh browser context to avoid cookie/session issues
+  // (e.g. Instagram sets cookies on first load that redirect subsequent requests)
+  const result = await callMdTool({ url: waybackUrl, f: 'raw' });
+  const content = (result as { content: { type: string; text: string }[] }).content
+    .filter((c) => c.type === 'text')
+    .map((c) => c.text)
+    .join('\n');
 
-  const content = await res.text();
   return { waybackUrl, content };
 }

@@ -215,10 +215,11 @@ function createServer(): McpServer {
       to: z.string().optional().describe('End date in YYYYMMDD format'),
       limit: z.number().optional().describe('Max number of snapshots to return (default: 100)'),
       match_type: z.enum(['exact', 'prefix', 'host', 'domain']).optional().describe('URL matching strategy (default: exact)'),
+      filter: z.array(z.string()).optional().describe('CDX API filters (e.g. ["statuscode:200", "mimetype:text/html"])'),
     },
-    async ({ url, from, to, limit, match_type }) => {
+    async ({ url, from, to, limit, match_type, filter }) => {
       try {
-        const snapshots = await getSnapshots({ url, from, to, limit, matchType: match_type });
+        const snapshots = await getSnapshots({ url, from, to, limit, matchType: match_type, filter });
         if (snapshots.length === 0) {
           return { content: [{ type: 'text', text: `No snapshots found for URL: ${url}` }] };
         }
