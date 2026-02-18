@@ -33,7 +33,7 @@ The MCP Server exposes a Streamable HTTP endpoint at `/mcp` that any MCP client 
 ```json
 {
   "mcpServers": {
-    "web-search": {
+    "web_search": {
       "type": "http",
       "url": "https://your-server.up.railway.app/mcp",
       "headers": {
@@ -44,7 +44,7 @@ The MCP Server exposes a Streamable HTTP endpoint at `/mcp` that any MCP client 
 }
 ```
 
-The eight tools available are: `web-search`, `web-fetch`, `web-screenshot`, `web-pdf`, `web-execute-js`, `web-crawl`, `web-snapshots`, and `web-archive`.
+The eight tools available are: `web_search`, `web_fetch`, `web_screenshot`, `web_pdf`, `web_execute_js`, `web_crawl`, `web_snapshots`, and `web_archive`.
 
 ## Why Deploy Web Search MCP on Railway?
 

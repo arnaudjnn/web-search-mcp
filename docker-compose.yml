@@ -23,7 +23,7 @@ services:
     environment:
       - CRAWL4AI_API_TOKEN=${CRAWL4AI_API_TOKEN:-}
 
-  web-search:
+  web_search:
     build: .
     ports:
       - "3000:3000"

@@ -4,9 +4,15 @@ import express, { Request, Response } from 'express';
 import { z } from 'zod';
 
 import { Config } from './config.js';
-import { callCrawlTool, callMdTool, callScreenshotTool, callPdfTool, callExecuteJsTool } from './crawl4ai.js';
+import {
+  callCrawlTool,
+  callExecuteJsTool,
+  callMdTool,
+  callPdfTool,
+  callScreenshotTool,
+} from './crawl4ai.js';
 import { searchSearXNG } from './searxng.js';
-import { getSnapshots, getArchivedPage } from './wayback.js';
+import { getArchivedPage, getSnapshots } from './wayback.js';
 
 // Helper function to log to stderr
 const log = (...args: any[]) => {
@@ -21,7 +27,7 @@ const log = (...args: any[]) => {
 function createServer(): McpServer {
   const server = new McpServer(
     {
-      name: 'web-search',
+      name: 'web_search',
       version: '1.0.0',
     },
     { capabilities: { logging: {} } },
@@ -29,7 +35,7 @@ function createServer(): McpServer {
 
   // Web search tool — lightweight, no LLM needed
   server.tool(
-    'web-search',
+    'web_search',
     'Search the web via SearXNG and return results.',
     {
       query: z.string().min(1).describe('The search query'),
@@ -65,9 +71,9 @@ function createServer(): McpServer {
     },
   );
 
-  // Web-fetch tool — proxy to Crawl4AI md tool
+  // web_fetch tool — proxy to Crawl4AI md tool
   server.tool(
-    'web-fetch',
+    'web_fetch',
     'Fetch a URL and return its content as clean markdown via Crawl4AI',
     {
       url: z.string().url().describe('URL to fetch'),
@@ -95,18 +101,21 @@ function createServer(): McpServer {
     },
   );
 
-  // Screenshot tool — proxy to Crawl4AI screenshot tool
+  // web_screenshot tool — proxy to Crawl4AI screenshot tool
   server.tool(
-    'web-screenshot',
+    'web_screenshot',
     'Capture a full-page PNG screenshot of a URL via Crawl4AI',
     {
       url: z.string().url().describe('URL to screenshot'),
-      screenshot_wait_for: z.number().optional().describe('Seconds to wait before capture (default: 2)'),
+      screenshot_wait_for: z
+        .number()
+        .optional()
+        .describe('Seconds to wait before capture (default: 2)'),
     },
-    async (args) => {
+    async args => {
       try {
         const result = await callScreenshotTool(args);
-        return result as { content: { type: "text"; text: string }[] };
+        return result as { content: { type: 'text'; text: string }[] };
       } catch (error) {
         return {
           content: [
@@ -121,17 +130,17 @@ function createServer(): McpServer {
     },
   );
 
-  // PDF tool — proxy to Crawl4AI pdf tool
+  // web_pdf tool — proxy to Crawl4AI pdf tool
   server.tool(
-    'web-pdf',
+    'web_pdf',
     'Generate a PDF document of a URL via Crawl4AI',
     {
       url: z.string().url().describe('URL to convert to PDF'),
     },
-    async (args) => {
+    async args => {
       try {
         const result = await callPdfTool(args);
-        return result as { content: { type: "text"; text: string }[] };
+        return result as { content: { type: 'text'; text: string }[] };
       } catch (error) {
         return {
           content: [
@@ -146,18 +155,21 @@ function createServer(): McpServer {
     },
   );
 
-  // Execute JS tool — proxy to Crawl4AI execute_js tool
+  // web_execute_js tool — proxy to Crawl4AI execute_js tool
   server.tool(
-    'web-execute-js',
+    'web_execute_js',
     'Execute JavaScript snippets on a URL via Crawl4AI and return the crawl result',
     {
       url: z.string().url().describe('URL to execute scripts on'),
-      scripts: z.array(z.string()).min(1).describe('List of JavaScript snippets to execute in order'),
+      scripts: z
+        .array(z.string())
+        .min(1)
+        .describe('List of JavaScript snippets to execute in order'),
     },
-    async (args) => {
+    async args => {
       try {
         const result = await callExecuteJsTool(args);
-        return result as { content: { type: "text"; text: string }[] };
+        return result as { content: { type: 'text'; text: string }[] };
       } catch (error) {
         return {
           content: [
@@ -172,9 +184,9 @@ function createServer(): McpServer {
     },
   );
 
-  // Crawl tool — proxy to Crawl4AI MCP server
+  // web_crawl tool — proxy to Crawl4AI MCP server
   server.tool(
-    'web-crawl',
+    'web_crawl',
     'Crawl one or more URLs and extract their content using Crawl4AI',
     {
       urls: z.array(z.string().url()).min(1).describe('List of URLs to crawl'),
@@ -205,53 +217,96 @@ function createServer(): McpServer {
     },
   );
 
-  // Snapshots tool — Wayback Machine CDX API
+  // web_snapshots tool — Wayback Machine CDX API
   server.tool(
-    'web-snapshots',
+    'web_snapshots',
     'List Wayback Machine snapshots for a URL',
     {
       url: z.string().describe('URL to check for snapshots'),
       from: z.string().optional().describe('Start date in YYYYMMDD format'),
       to: z.string().optional().describe('End date in YYYYMMDD format'),
-      limit: z.number().optional().describe('Max number of snapshots to return (default: 100)'),
-      match_type: z.enum(['exact', 'prefix', 'host', 'domain']).optional().describe('URL matching strategy (default: exact)'),
-      filter: z.array(z.string()).optional().describe('CDX API filters (e.g. ["statuscode:200", "mimetype:text/html"])'),
+      limit: z
+        .number()
+        .optional()
+        .describe('Max number of snapshots to return (default: 100)'),
+      match_type: z
+        .enum(['exact', 'prefix', 'host', 'domain'])
+        .optional()
+        .describe('URL matching strategy (default: exact)'),
+      filter: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'CDX API filters (e.g. ["statuscode:200", "mimetype:text/html"])',
+        ),
     },
     async ({ url, from, to, limit, match_type, filter }) => {
       try {
-        const snapshots = await getSnapshots({ url, from, to, limit, matchType: match_type, filter });
+        const snapshots = await getSnapshots({
+          url,
+          from,
+          to,
+          limit,
+          matchType: match_type,
+          filter,
+        });
         if (snapshots.length === 0) {
-          return { content: [{ type: 'text', text: `No snapshots found for URL: ${url}` }] };
+          return {
+            content: [
+              { type: 'text', text: `No snapshots found for URL: ${url}` },
+            ],
+          };
         }
-        return { content: [{ type: 'text', text: JSON.stringify(snapshots, null, 2) }] };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(snapshots, null, 2) }],
+        };
       } catch (error) {
         return {
-          content: [{ type: 'text' as const, text: `Snapshots error: ${error instanceof Error ? error.message : String(error)}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Snapshots error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
           isError: true,
         };
       }
     },
   );
 
-  // Archive tool — Wayback Machine page retrieval
+  // web_archive tool — Wayback Machine page retrieval
   server.tool(
-    'web-archive',
+    'web_archive',
     'Retrieve an archived page from the Wayback Machine',
     {
       url: z.string().describe('URL of the page to retrieve'),
       timestamp: z.string().describe('Timestamp in YYYYMMDDHHMMSS format'),
-      original: z.boolean().optional().describe('Get original content without Wayback Machine banner (default: false)'),
+      original: z
+        .boolean()
+        .optional()
+        .describe(
+          'Get original content without Wayback Machine banner (default: false)',
+        ),
     },
     async ({ url, timestamp, original }) => {
       try {
-        const { waybackUrl, content } = await getArchivedPage({ url, timestamp, original });
+        const { waybackUrl, content } = await getArchivedPage({
+          url,
+          timestamp,
+          original,
+        });
         const MAX_LENGTH = 50000;
         const truncated = content.length > MAX_LENGTH;
         const text = `Wayback URL: ${waybackUrl}\nContent length: ${content.length} characters\n\n${truncated ? content.substring(0, MAX_LENGTH) + '\n\n[Content truncated]' : content}`;
         return { content: [{ type: 'text', text }] };
       } catch (error) {
         return {
-          content: [{ type: 'text' as const, text: `Archive error: ${error instanceof Error ? error.message : String(error)}` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Archive error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
           isError: true,
         };
       }

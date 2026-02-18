@@ -1,26 +1,26 @@
 # Web Search MCP
 
-An [MCP](https://modelcontextprotocol.io/) server that provides eight tools: a fast **web search** powered by [SearXNG](https://github.com/searxng/searxng), five [Crawl4AI](https://github.com/unclecode/crawl4ai)-powered tools (**web-fetch**, **web-screenshot**, **web-pdf**, **web-execute-js**, **web-crawl**), and two [Wayback Machine](https://web.archive.org/) tools (**web-snapshots**, **web-archive**).
+An [MCP](https://modelcontextprotocol.io/) server that provides eight tools: a fast **web search** powered by [SearXNG](https://github.com/searxng/searxng), five [Crawl4AI](https://github.com/unclecode/crawl4ai)-powered tools (**web_fetch**, **web_screenshot**, **web_pdf**, **web_execute_js**, **web_crawl**), and two [Wayback Machine](https://web.archive.org/) tools (**web_snapshots**, **web_archive**).
 
 ## Architecture
 
 ```mermaid
 graph LR
-    Client["MCP Client<br/>(Claude, Cursor, etc.)"] -->|web-search| Server["MCP Server"]
-    Client -->|web-fetch| Server
-    Client -->|web-screenshot| Server
-    Client -->|web-pdf| Server
-    Client -->|web-execute-js| Server
-    Client -->|web-crawl| Server
-    Client -->|web-snapshots| Server
-    Client -->|web-archive| Server
+    Client["MCP Client<br/>(Claude, Cursor, etc.)"] -->|web_search| Server["MCP Server"]
+    Client -->|web_fetch| Server
+    Client -->|web_screenshot| Server
+    Client -->|web_pdf| Server
+    Client -->|web_execute_js| Server
+    Client -->|web_crawl| Server
+    Client -->|web_snapshots| Server
+    Client -->|web_archive| Server
     Server --> SearXNG
     SearXNG --> Redis
     Server --> Crawl4AI
     Server --> Wayback["Wayback Machine"]
 ```
 
-The `web-search` tool queries SearXNG for search results. The Crawl4AI tools handle content extraction, screenshots, PDFs, JS execution, and multi-URL crawling. The Wayback Machine tools list and retrieve archived pages.
+The `web_search` tool queries SearXNG for search results. The Crawl4AI tools handle content extraction, screenshots, PDFs, JS execution, and multi-URL crawling. The Wayback Machine tools list and retrieve archived pages.
 
 The full stack deploys as **4 services**: Redis, SearXNG, Crawl4AI, and this MCP server.
 
@@ -28,7 +28,7 @@ The full stack deploys as **4 services**: Redis, SearXNG, Crawl4AI, and this MCP
 
 The server exposes eight MCP tools:
 
-### `web-search`
+### `web_search`
 
 Lightweight web search via SearXNG. Returns structured results.
 
@@ -39,7 +39,7 @@ Lightweight web search via SearXNG. Returns structured results.
 
 Returns a JSON array of `{ url, title, description }` results.
 
-### `web-fetch`
+### `web_fetch`
 
 Fetch a single URL and return its content as clean markdown via Crawl4AI.
 
@@ -51,7 +51,7 @@ Fetch a single URL and return its content as clean markdown via Crawl4AI.
 
 Returns the page content as markdown.
 
-### `web-screenshot`
+### `web_screenshot`
 
 Capture a full-page PNG screenshot of a URL via Crawl4AI.
 
@@ -62,7 +62,7 @@ Capture a full-page PNG screenshot of a URL via Crawl4AI.
 
 Returns a base64-encoded PNG image.
 
-### `web-pdf`
+### `web_pdf`
 
 Generate a PDF document of a URL via Crawl4AI.
 
@@ -72,7 +72,7 @@ Generate a PDF document of a URL via Crawl4AI.
 
 Returns a base64-encoded PDF.
 
-### `web-execute-js`
+### `web_execute_js`
 
 Execute JavaScript snippets on a URL via Crawl4AI and return the full crawl result.
 
@@ -83,7 +83,7 @@ Execute JavaScript snippets on a URL via Crawl4AI and return the full crawl resu
 
 Returns the full CrawlResult JSON including markdown, links, media, and JS execution results.
 
-### `web-crawl`
+### `web_crawl`
 
 Crawl one or more URLs and extract their content using Crawl4AI.
 
@@ -95,7 +95,7 @@ Crawl one or more URLs and extract their content using Crawl4AI.
 
 Returns the extracted content from each URL.
 
-### `web-snapshots`
+### `web_snapshots`
 
 List Wayback Machine snapshots for a URL.
 
@@ -110,7 +110,7 @@ List Wayback Machine snapshots for a URL.
 
 Returns a JSON array of snapshots with timestamps, status codes, and archive URLs.
 
-### `web-archive`
+### `web_archive`
 
 Retrieve an archived page from the Wayback Machine.
 
@@ -129,7 +129,7 @@ All examples below assume your server is running at `https://your-server.up.rail
 #### Claude Code (CLI)
 
 ```bash
-claude mcp add web-search \
+claude mcp add web_search \
   --transport http \
   https://your-server.up.railway.app/mcp \
   --header "Authorization: Bearer your-api-key"
@@ -142,7 +142,7 @@ Add to `.mcp.json` at the root of any project to make the tool available to all 
 ```json
 {
   "mcpServers": {
-    "web-search": {
+    "web_search": {
       "type": "http",
       "url": "https://your-server.up.railway.app/mcp",
       "headers": {
@@ -158,7 +158,7 @@ Add to `.mcp.json` at the root of any project to make the tool available to all 
 ```json
 {
   "mcpServers": {
-    "web-search": {
+    "web_search": {
       "type": "http",
       "url": "https://your-server.up.railway.app/mcp",
       "headers": {
@@ -171,12 +171,12 @@ Add to `.mcp.json` at the root of any project to make the tool available to all 
 
 ### Replace Claude Code's Built-in Web Search & Web Fetch (Optional)
 
-By default, Claude Code uses its own `WebSearch` and `WebFetch` tools. You can replace them with this server's `web-search` and `web-fetch` tools for privacy-respecting, self-hosted results.
+By default, Claude Code uses its own `WebSearch` and `WebFetch` tools. You can replace them with this server's `web_search` and `web_fetch` tools for privacy-respecting, self-hosted results.
 
 **1. Add the MCP server globally:**
 
 ```bash
-claude mcp add web-search --scope user \
+claude mcp add web_search --scope user \
   --transport http \
   https://your-server.up.railway.app/mcp \
   --header "Authorization: Bearer your-api-key"
@@ -197,8 +197,8 @@ claude mcp add web-search --scope user \
 ```markdown
 ## Search & Fetch
 
-- Use the web-search MCP tool for all web searches
-- Use the web-fetch MCP tool to fetch and read web pages
+- Use the web_search MCP tool for all web searches
+- Use the web_fetch MCP tool to fetch and read web pages
 - Do not attempt to use the built-in WebSearch or WebFetch tools
 ```
 
