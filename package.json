@@ -1,5 +1,5 @@
 {
-  "name": "open-deep-research",
+  "name": "web-tools",
   "version": "0.0.1",
   "main": "dist/mcp-server.js",
   "type": "module",

@@ -1,4 +1,4 @@
-# Web Search MCP
+# Web Tools
 
 An [MCP](https://modelcontextprotocol.io/) server that provides eight tools: a fast **web search** powered by [SearXNG](https://github.com/searxng/searxng), five [Crawl4AI](https://github.com/unclecode/crawl4ai)-powered tools (**web_fetch**, **web_screenshot**, **web_pdf**, **web_execute_js**, **web_crawl**), and two [Wayback Machine](https://web.archive.org/) tools (**web_snapshots**, **web_archive**).
 
@@ -129,7 +129,7 @@ All examples below assume your server is running at `https://your-server.up.rail
 #### Claude Code (CLI)
 
 ```bash
-claude mcp add web_search \
+claude mcp add web_tools \
   --transport http \
   https://your-server.up.railway.app/mcp \
   --header "Authorization: Bearer your-api-key"
@@ -142,7 +142,7 @@ Add to `.mcp.json` at the root of any project to make the tool available to all 
 ```json
 {
   "mcpServers": {
-    "web_search": {
+    "web_tools": {
       "type": "http",
       "url": "https://your-server.up.railway.app/mcp",
       "headers": {
@@ -158,7 +158,7 @@ Add to `.mcp.json` at the root of any project to make the tool available to all 
 ```json
 {
   "mcpServers": {
-    "web_search": {
+    "web_tools": {
       "type": "http",
       "url": "https://your-server.up.railway.app/mcp",
       "headers": {
@@ -176,7 +176,7 @@ By default, Claude Code uses its own `WebSearch` and `WebFetch` tools. You can r
 **1. Add the MCP server globally:**
 
 ```bash
-claude mcp add web_search --scope user \
+claude mcp add web_tools --scope user \
   --transport http \
   https://your-server.up.railway.app/mcp \
   --header "Authorization: Bearer your-api-key"
@@ -206,7 +206,7 @@ claude mcp add web_search --scope user \
 
 ## Deployment (Railway)
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/web-search-mcp-open-source-alternative-t?referralCode=zMTz_F&utm_medium=integration&utm_source=template&utm_campaign=generic)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/web-tools-open-source-alternative-t?referralCode=zMTz_F&utm_medium=integration&utm_source=template&utm_campaign=generic)
 
 - Click **Deploy on Railway**: you'll see all 4 services listed (Redis, SearXNG, Crawl4AI, MCP Server)
 - Click **Deploy**: Railway provisions everything and wires the services together automatically
@@ -217,8 +217,8 @@ claude mcp add web_search --scope user \
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/arnaudjnn/web-search-mcp
-cd web-search-mcp
+git clone https://github.com/arnaudjnn/web-tools
+cd web-tools
 pnpm install
 ```
 

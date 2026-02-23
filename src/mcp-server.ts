@@ -27,7 +27,7 @@ const log = (...args: any[]) => {
 function createServer(): McpServer {
   const server = new McpServer(
     {
-      name: 'web_search',
+      name: 'web_tools',
       version: '1.0.0',
     },
     { capabilities: { logging: {} } },
