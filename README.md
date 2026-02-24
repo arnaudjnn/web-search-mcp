@@ -99,14 +99,14 @@ Returns the extracted content from each URL.
 
 List Wayback Machine snapshots for a URL.
 
-| Parameter    | Type              | Description                                                             |
-| ------------ | ----------------- | ----------------------------------------------------------------------- |
-| `url`        | string (required) | URL to check for snapshots                                              |
-| `from`       | string (optional) | Start date in YYYYMMDD format                                           |
-| `to`         | string (optional) | End date in YYYYMMDD format                                             |
-| `limit`      | number (optional) | Max number of snapshots to return (default: 100)                        |
-| `match_type` | enum (optional)   | URL matching: `exact`, `prefix`, `host`, or `domain` (default: `exact`) |
-| `filter`     | string[] (optional) | CDX API filters (e.g. `["statuscode:200", "mimetype:text/html"]`)      |
+| Parameter    | Type                | Description                                                             |
+| ------------ | ------------------- | ----------------------------------------------------------------------- |
+| `url`        | string (required)   | URL to check for snapshots                                              |
+| `from`       | string (optional)   | Start date in YYYYMMDD format                                           |
+| `to`         | string (optional)   | End date in YYYYMMDD format                                             |
+| `limit`      | number (optional)   | Max number of snapshots to return (default: 100)                        |
+| `match_type` | enum (optional)     | URL matching: `exact`, `prefix`, `host`, or `domain` (default: `exact`) |
+| `filter`     | string[] (optional) | CDX API filters (e.g. `["statuscode:200", "mimetype:text/html"]`)       |
 
 Returns a JSON array of snapshots with timestamps, status codes, and archive URLs.
 
@@ -206,7 +206,7 @@ claude mcp add web_tools --scope user \
 
 ## Deployment (Railway)
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/web-tools-open-source-alternative-t?referralCode=zMTz_F&utm_medium=integration&utm_source=template&utm_campaign=generic)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/web-tools?referralCode=zMTz_F&utm_medium=integration&utm_source=template&utm_campaign=generic)
 
 - Click **Deploy on Railway**: you'll see all 4 services listed (Redis, SearXNG, Crawl4AI, MCP Server)
 - Click **Deploy**: Railway provisions everything and wires the services together automatically
