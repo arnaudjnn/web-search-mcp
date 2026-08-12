@@ -81,6 +81,28 @@ async function proxyCrawl4AI(
       };
     }
 
+    // Crawl4AI's MCP layer reports upstream HTTP failures as a SUCCESSFUL tool
+    // call whose text is an error envelope — `{"error": 500, "detail": ...}` —
+    // with isError absent. Left alone, that envelope flows all the way out as if
+    // it were page content: a caller asking for a Trustpilot page got
+    // `{"error": 500, ...}` back with isError:false. Detect the envelope and
+    // call it what it is.
+    const first = resolved.content?.[0]?.text ?? '';
+    if (first.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(first) as { error?: unknown; detail?: unknown };
+        if (parsed && typeof parsed === 'object' && 'error' in parsed && !('results' in parsed)) {
+          log(`Crawl4AI ${toolName} error envelope:`, first.slice(0, 300));
+          return {
+            content: [{ type: 'text', text: `Crawl4AI ${toolName} error: ${first}` }],
+            isError: true,
+          };
+        }
+      } catch {
+        // Not JSON after all — fall through and treat it as content.
+      }
+    }
+
     return resolved;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

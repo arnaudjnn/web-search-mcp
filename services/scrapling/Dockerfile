@@ -13,9 +13,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-# Downloads ~200 MB of Camoufox + Patchright binaries into the image so
-# the runtime container starts fast and offline.
-RUN scrapling install
+# Downloads the browser binaries into the image so the runtime container starts
+# fast and offline.
+#
+# BOTH commands are required, and `scrapling install` alone is not enough:
+# StealthySession on 0.4.x drives Patchright's Chromium, which `scrapling
+# install` does not fetch. Without the second line the container starts clean and
+# then fails every fetch at runtime with
+#   BrowserType.launch_persistent_context: Executable doesn't exist at
+#   /root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome
+# which is a 502 per request, not a failed build. Re-check this if the pinned
+# Scrapling version changes engines again.
+RUN scrapling install \
+ && patchright install chromium \
+ && patchright install-deps chromium
 
 COPY app.py .
 
