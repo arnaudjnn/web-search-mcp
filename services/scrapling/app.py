@@ -182,16 +182,43 @@ def parse_proxy(url: str):
     }
 
 
+def _discard_session(mode: Mode) -> None:
+    """Tear down a mode's session so the next request builds a fresh one.
+
+    A raised fetch does not leave a usable session behind: Patchright's sync API
+    is driven from this one pinned thread, and once a call blows up mid-flight the
+    driver can be left in a state where every subsequent fetch on that session
+    hangs instead of erroring. Observed exactly that after Scrapling raised "No
+    Cloudflare challenge found" — the service kept accepting connections and
+    answering nothing, so callers saw an 85s timeout rather than a failure, and
+    the whole sidecar looked dead while the process was fine.
+
+    So an error always costs us the session, never the worker.
+    """
+    session = _sessions.pop(mode, None)
+    if session is None:
+        return
+    try:
+        session.__exit__(None, None, None)
+    except Exception as e:  # noqa: BLE001 - teardown must not mask the real error
+        log.warning("discarding %s session raised on close: %s", mode.value, e)
+    log.info("discarded %s session; next request rebuilds it", mode.value)
+
+
 def _do_fetch(mode: Mode, req_url: str, network_idle: bool, timeout_ms: int,
               disable_resources: bool) -> dict:
     """Runs inside this mode's single-thread executor."""
     session = _ensure_session_in_worker(mode)
-    page = session.fetch(
-        req_url,
-        network_idle=network_idle,
-        timeout=timeout_ms,
-        disable_resources=disable_resources,
-    )
+    try:
+        page = session.fetch(
+            req_url,
+            network_idle=network_idle,
+            timeout=timeout_ms,
+            disable_resources=disable_resources,
+        )
+    except Exception:
+        _discard_session(mode)
+        raise
     return {
         "status": page.status,
         "url": page.url,
@@ -241,16 +268,25 @@ def healthz():
     }
 
 
+# Hard ceiling on any single fetch, independent of the caller's timeout_ms. The
+# challenge solver can block well past its own deadline (measured
+# `Locator.bounding_box: Timeout 120000ms exceeded`), and each mode has a
+# single-slot executor — so one unbounded fetch stalls every later request for
+# that mode. Cap it here so the slot always comes back.
+MAX_FETCH_MS = 90_000
+
+
 async def _run(mode: Mode, req: FetchRequest) -> dict:
     disable_resources = (
         req.disable_resources
         if req.disable_resources is not None
         else (mode is not Mode.SOLVE)
     )
+    timeout_ms = min(req.timeout_ms, MAX_FETCH_MS)
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         _executors[mode], _do_fetch, mode, req.url, req.network_idle,
-        req.timeout_ms, disable_resources,
+        timeout_ms, disable_resources,
     )
 
 
@@ -277,7 +313,10 @@ async def fetch(req: FetchRequest):
             solved = await _run(Mode.SOLVE, req)
         except Exception as e:
             # Keep the original response rather than turning a usable 403 body
-            # into a 502 — the caller can still inspect it.
+            # into a 502 — the caller can still inspect it. Scrapling raises "No
+            # Cloudflare challenge found" here whenever the wall is some other
+            # vendor's, which is common and not fatal; _do_fetch has already
+            # discarded the solve session, so the next attempt starts clean.
             log.warning("escalation to solve failed url=%s: %s", req.url, e)
             return FetchResponse(**data, escalated=False)
         return FetchResponse(**solved, escalated=True)

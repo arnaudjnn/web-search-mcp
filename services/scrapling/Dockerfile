@@ -32,9 +32,10 @@ COPY app.py .
 
 # WORKERS is lower than a single-session service would want: each worker can
 # lazily build up to one browser PER MODE (fast / stealth / solve), so the
-# worst-case browser count is WORKERS * 3 at ~200-300MB each. 3 workers keeps
-# that inside a ~2GB container while still serving the three modes in parallel.
-ENV PORT=8000 WORKERS=3
+# worst-case browser count is WORKERS * 3 at ~200-300MB each. At 3 workers that
+# is up to 9 live browsers, which is more than this container's memory wants;
+# 2 keeps the worst case near ~1.5GB while still serving requests in parallel.
+ENV PORT=8000 WORKERS=2
 EXPOSE 8000
 # Bind to 0.0.0.0. Railway's edge router talks IPv4 to the container
 # (so an IPv6-only bind returns 502), and Railway's private DNS for
