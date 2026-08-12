@@ -1,6 +1,6 @@
 # Web Tools
 
-A self-hosted web toolkit providing nine tools for search, content extraction, and archival. Available as an [MCP](https://modelcontextprotocol.io/) server, REST API, and CLI — powered by [SearXNG](https://github.com/searxng/searxng), [Crawl4AI](https://github.com/unclecode/crawl4ai), [Scrapling](https://github.com/D4Vinci/Scrapling), and the [Wayback Machine](https://web.archive.org/).
+A self-hosted web toolkit providing fourteen tools for search, content extraction, and archival. Available as an [MCP](https://modelcontextprotocol.io/) server, REST API, and CLI — powered by [SearXNG](https://github.com/searxng/searxng), [Crawl4AI](https://github.com/unclecode/crawl4ai), [Scrapling](https://github.com/D4Vinci/Scrapling), [Camoufox](https://github.com/daijro/camoufox), and the [Wayback Machine](https://web.archive.org/).
 
 ## Architecture
 
@@ -13,23 +13,34 @@ graph LR
     Toolkit --> SearXNG
     SearXNG --> Redis
     Toolkit --> Scrapling
+    Toolkit --> Camoufox
     Toolkit --> Crawl4AI
     Toolkit --> Wayback["Wayback Machine"]
 ```
 
-### Why two fetchers
+### Why three fetchers
 
-They are not redundant — each reaches pages the other cannot, and the split is
+They are not redundant — each reaches pages the others cannot, and the split is
 measured, not aesthetic:
 
-| | Crawl4AI | Scrapling |
-| --- | --- | --- |
-| Egress | this host's IP only¹ | rotating residential, or direct |
-| JS challenges | no | yes (`solve`) |
-| LinkedIn profiles | decays to 0/6, HTTP 999 | 94% (34/36) |
-| Trustpilot reviews | luck-of-the-IP | 2/2 via challenge solve |
-| Ordinary pages | ~2-5s | ~0.7-1.9s (`fast`) |
-| Screenshot / PDF / JS exec | yes | no |
+| | Crawl4AI | Scrapling | Camoufox |
+| --- | --- | --- | --- |
+| Browser | Chromium | Patchright Chromium | **Firefox** |
+| Egress | this host's IP only¹ | rotating **US** residential | rotating **Italian** residential |
+| JS challenges | no | yes (`solve`) | n/a (coherent fingerprint) |
+| LinkedIn profiles | decays to 0/6, HTTP 999 | 94% (34/36) | — |
+| Trustpilot reviews | luck-of-the-IP | 2/2 via challenge solve | — |
+| Italian bot-gated sites | blocked | wrong country | **the point** |
+| Binary / PDF fetch | — | — | yes (`web_bytes`) |
+| Anti-bot sensor sessions | — | — | yes (`web_spa_fetch`) |
+| Ordinary pages | ~2-5s | ~0.7-1.9s (`fast`) | ~8-12s |
+
+Camoufox is Firefox on purpose: stealth-patched headless *Chrome* was flagged by
+Akamai even through an Italian residential IP, while Camoufox's fingerprint is
+internally coherent — its locale and timezone are derived from the exit IP, so
+`web_eval` on an Italian site reports `Europe/Rome`. Italian sources either
+bot-gate datacenter IPs outright or score the exit country as part of a sensor
+decision, and a US residential exit is not a milder version of the right answer.
 
 ¹ Crawl4AI >= 0.9 treats every HTTP request body as `Provenance.UNTRUSTED` and
 lists `proxy_config` in `UNTRUSTED_FORBIDDEN_FIELDS`, so passing a proxy is a
@@ -68,11 +79,11 @@ The project is structured as a **monorepo** with three packages:
 - **`packages/api`** — Express HTTP server exposing MCP (`POST /mcp`) and REST (`POST /api/v0/{tool_name}`) endpoints.
 - **`packages/cli`** — Commander.js CLI for terminal usage.
 
-The full stack deploys as **5 services**: Redis, SearXNG, Crawl4AI, Scrapling, and the Web Tools server.
+The full stack deploys as **6 services**: Redis, SearXNG, Crawl4AI, Scrapling, Camoufox, and the Web Tools server.
 
 ## Tools
 
-The server exposes nine tools:
+The server exposes fourteen tools:
 
 ### `web_search`
 
@@ -329,7 +340,15 @@ image, and each one **must** have its Root Directory set:
 | Service | Root Directory | Env |
 | --- | --- | --- |
 | SearXNG | `services/searxng` | `PROXY_URL` (optional) — proxy for outgoing search requests |
-| Scrapling | `services/scrapling` | `PROXY_URL` (required for the residential-egress path), `PORT=8000` |
+| Scrapling | `services/scrapling` | `PROXY_URL` (US-geo, for the residential path), `PORT=8000` |
+| Camoufox | `services/camoufox` | `PROXY_URL` (**IT-geo**), `PORT=8000`, `WORKERS=1` |
+
+> Camoufox keeps `WORKERS=1` — one warmed anti-bot session per container, which
+> cannot be shared across processes. Scale it with **replicas**, not workers:
+> `railway service scale --service camoufox eu-west=2`. Keep it in EU West; a US
+> container reaches an Italian exit and an Italian target across the Atlantic
+> twice. Note `scale` ADDS to existing regions, so pass `us-east=0` to move
+> rather than spread.
 
 > **Set Root Directory before connecting the repo.** Railway resolves a service's
 > build config by walking up from its Root Directory, so a subfolder service
@@ -368,6 +387,7 @@ private networking:
 CRAWL4AI_URL       = http://${{Crawl4AI.RAILWAY_PRIVATE_DOMAIN}}:${{Crawl4AI.PORT}}
 CRAWL4AI_API_TOKEN = ${{Crawl4AI.CRAWL4AI_API_TOKEN}}
 SCRAPLING_URL      = http://${{Scrapling.RAILWAY_PRIVATE_DOMAIN}}:${{Scrapling.PORT}}
+CAMOUFOX_URL       = http://${{camoufox.RAILWAY_PRIVATE_DOMAIN}}:${{camoufox.PORT}}
 SEARXNG_URL        = http://${{SearXNG.RAILWAY_PRIVATE_DOMAIN}}:8080
 ```
 
