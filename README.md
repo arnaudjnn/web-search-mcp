@@ -410,14 +410,25 @@ cp .env.example .env.local
 ### 3. Start the local stack
 
 ```bash
-docker compose up -d redis searxng crawl4ai
+docker compose up -d redis searxng crawl4ai scrapling camoufox
 ```
 
-This starts Redis, SearXNG, and Crawl4AI. Then run the server:
+That starts the five backing services. Then run the server against them:
 
 ```bash
-SEARXNG_URL=http://localhost:8080 CRAWL4AI_URL=http://localhost:11235 pnpm run start
+SEARXNG_URL=http://localhost:8080 \
+CRAWL4AI_URL=http://localhost:11235 \
+SCRAPLING_URL=http://localhost:8000 \
+CAMOUFOX_URL=http://localhost:8001 \
+pnpm run start
 ```
+
+The two browser sidecars each download a browser at image-build time (~200MB
+Chromium for Scrapling, Camoufox's Firefox build plus a GeoIP database), so the
+first `docker compose up` is slow. Bring up only what you need: Redis and SearXNG
+alone are enough for `web_search`, and Crawl4AI alone for `web_crawl` /
+`web_screenshot` / `web_pdf`. Residential egress needs a `PROXY_URL` you supply —
+without one, `web_fetch` still works via the direct paths.
 
 The server is available at `http://localhost:3000`.
 

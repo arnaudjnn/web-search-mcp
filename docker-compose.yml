@@ -30,16 +30,32 @@ services:
       # Required only for mode=stealth (LinkedIn). fast/solve work without it.
       - PROXY_URL=${PROXY_URL:-}
 
+  camoufox:
+    build: ./services/camoufox
+    ports:
+      - "8001:8000"
+    environment:
+      # Geo-targeted residential exit. Required for the sources that refuse
+      # anything else; fast/solve paths on the other services work without it.
+      - PROXY_URL=${CAMOUFOX_PROXY_URL:-}
+      # One warmed anti-bot session per container — never raise this.
+      - WORKERS=1
+
   web_tools:
     build:
+      # The server's Dockerfile lives at the repo root — that is also what the
+      # Railway "Tools" service builds, so local and deployed stay the same image
+      # definition. (This previously pointed at packages/api/Dockerfile, which does
+      # not exist, so the local build simply failed.)
       context: .
-      dockerfile: packages/api/Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "3000:3000"
     environment:
       - SEARXNG_URL=http://searxng:8080
       - CRAWL4AI_URL=http://crawl4ai:11235
       - SCRAPLING_URL=http://scrapling:8000
+      - CAMOUFOX_URL=http://camoufox:8000
       - PORT=3000
     env_file:
       - .env.local
@@ -47,3 +63,4 @@ services:
       - searxng
       - crawl4ai
       - scrapling
+      - camoufox
