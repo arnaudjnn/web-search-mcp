@@ -31,11 +31,41 @@ export class ScraplingError extends Error {}
 // subsequent calls skip Scrapling entirely until the cooldown expires. Only
 // transport failures trip it — an HTTP error means the service is there and
 // answering, which is a different problem and shouldn't disable it.
-const UNAVAILABLE_COOLDOWN_MS = 5 * 60_000;
-// Probing costs a round trip on a host that usually does not resolve at all, so
-// keep it far below the fetch timeout.
-const REACHABILITY_TIMEOUT_MS = 5_000;
+// Kept short. The breaker exists to avoid re-dialling a host that does not
+// exist; it is not a load-shedding mechanism, and every minute it stays closed
+// is a minute of degraded fetching (no residential egress, no challenge
+// solving). A wrong trip must expire fast.
+const UNAVAILABLE_COOLDOWN_MS = 60_000;
 let unavailableUntil = 0;
+
+/**
+ * Does this error mean "there is no such service", as opposed to "the service is
+ * busy or slow"?
+ *
+ * This distinction is the whole safety of the breaker. An earlier version
+ * tripped on any failure, including a timeout — so one slow moment took
+ * residential egress out for five minutes and LinkedIn silently fell back to
+ * the datacenter IP, where it is blocked outright. Only unresolvable/refused
+ * hosts count, which is exactly the pre-Scrapling-template case we want to
+ * absorb, and those fail in milliseconds.
+ */
+function isUnreachable(err: unknown): boolean {
+  const codes = new Set([
+    'ENOTFOUND',
+    'ECONNREFUSED',
+    'EAI_AGAIN',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+    'ERR_INVALID_URL',
+  ]);
+  let cur: unknown = err;
+  for (let depth = 0; cur && depth < 5; depth++) {
+    const code = (cur as { code?: unknown }).code;
+    if (typeof code === 'string' && codes.has(code)) return true;
+    cur = (cur as { cause?: unknown }).cause;
+  }
+  return false;
+}
 
 export function scraplingAvailable(): boolean {
   return Date.now() >= unavailableUntil;
@@ -69,19 +99,11 @@ export async function scraplingFetch(params: {
   const timeoutMs = params.timeoutMs ?? 60_000;
   const endpoint = new URL('/fetch', Config.scrapling.url);
 
-  // Cheap liveness probe first. Without it, a stack with no Scrapling service
-  // would block for the full fetch timeout before falling back — and on the
-  // very first call of a cold process that is the caller's latency, not ours.
-  try {
-    await fetch(new URL('/healthz', Config.scrapling.url), {
-      signal: AbortSignal.timeout(REACHABILITY_TIMEOUT_MS),
-    });
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    markUnavailable(reason);
-    throw new ScraplingError(`scrapling /healthz unreachable: ${reason}`);
-  }
-
+  // No pre-flight health probe. One was tried and made things worse: it added a
+  // round trip to every fetch, and its short deadline meant a momentarily busy
+  // sidecar looked *absent*, tripping the breaker and silently demoting LinkedIn
+  // to the datacenter IP. A host that genuinely does not exist fails DNS in
+  // milliseconds, so the real request is already a fast enough probe.
   let response: Response;
   try {
     response = await fetch(endpoint, {
@@ -99,8 +121,10 @@ export async function scraplingFetch(params: {
     });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    markUnavailable(reason);
-    throw new ScraplingError(`scrapling /fetch unreachable: ${reason}`);
+    // Only a genuinely absent host disables the sidecar. A timeout means it is
+    // there and working on something, so let the next call try again.
+    if (isUnreachable(err)) markUnavailable(reason);
+    throw new ScraplingError(`scrapling /fetch failed: ${reason}`);
   }
 
   if (!response.ok) {
