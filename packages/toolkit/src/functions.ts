@@ -14,7 +14,7 @@ import {
   camoufoxScreenshot,
   camoufoxSpaFetch,
 } from './camoufox.js';
-import { isItalianSource } from './routing.js';
+import { isItalianSource, prefersCrawl4ai } from './routing.js';
 import { scraplingFetch } from './scrapling.js';
 import { searchSearXNG } from './searxng.js';
 import { getStats, recordCall, type ToolName } from './stats.js';
@@ -235,6 +235,12 @@ export async function web_fetch(params: Record<string, unknown>): Promise<ToolRe
   // Which backend fetches this is decided from the host (see routing.ts), never
   // asked of the caller. Italian sources need an Italian residential visitor —
   // a US exit is the wrong country, not a milder version of the right one.
+  // Some hosts are served best by the plain datacenter browser — going through a
+  // stealth path would only spend a timeout before falling back here anyway.
+  if (prefersCrawl4ai(url)) {
+    return trace('web_fetch', await crawl4aiFetch(url, filter, delay));
+  }
+
   let result: ToolResult;
   try {
     const page = isItalianSource(url)

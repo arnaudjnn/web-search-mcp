@@ -23,7 +23,8 @@ Measured 2026-08-12, same browser engine throughout:
   STEALTH  residential proxy, no solve
            linkedin 34/36 (94%) @ ~2.9s  (direct decays to 0/6 HTTP 999)
   SOLVE    direct, solve_cloudflare, subresources loaded
-           trustpilot 2/2 @ 1.9-4.1s  (vs 0/2 403 without solve)
+           clears an unattended JS challenge; CANNOT clear a managed Turnstile,
+           where it loops until the fetch cap (see SOLVE_HOSTS)
 
 FAST is the default rather than SOLVE, even though SOLVE is a superset
 functionally, because solve_cloudflare is not free and not always bounded:
@@ -96,17 +97,21 @@ class Mode(str, Enum):
 # challenged, so an unlisted host never pays the solve tax up front.
 STEALTH_HOSTS = ("linkedin.com",)
 
-# Hosts that must start at SOLVE because escalation can never rescue them: they
-# answer FAST with HTTP 200, so nothing looks challenged, but the body is an
-# un-hydrated shell. Trustpilot is the case in hand — from a datacenter IP it
-# returns a ~965KB page whose review data sits only in embedded JSON, with no
-# rendered /users/ anchors, so the markdown comes out with zero reviews and the
-# caller concludes the company has none. SOLVE loads subresources and yields the
-# rendered page with all 24 anchors.
+# Hosts that must START at SOLVE, because escalation can never rescue them: they
+# answer FAST with HTTP 200, so nothing looks challenged, yet the body is wrong.
 #
-# The cost is real (SOLVE is ~2x FAST) — only list a host after confirming FAST
-# returns a 200 that is *wrong*, which is the one thing escalation cannot detect.
-SOLVE_HOSTS = ("trustpilot.com",)
+# Empty, and that is a finding rather than an oversight. trustpilot.com lived here
+# — FAST returns a ~965KB page whose review data sits only in embedded JSON with
+# no rendered /users/ anchors, so the markdown parsed as zero reviews on a page
+# that had 24. SOLVE fixed that until Trustpilot moved to a *managed* Cloudflare
+# Turnstile, which this solver cannot clear: it loops "captcha is still present,
+# solving again" until the fetch cap, every time. web-tools now routes that host to
+# Crawl4AI, whose datacenter IP Trustpilot is happy to serve in ~4s.
+#
+# Before adding a host, confirm SOLVE actually CLEARS it — not merely that FAST is
+# refused. An unsolvable challenge here costs the full MAX_FETCH_MS per request and
+# blocks the solve executor behind it.
+SOLVE_HOSTS: tuple[str, ...] = ()
 
 
 def _host_matches(host: str, suffixes: tuple[str, ...]) -> bool:

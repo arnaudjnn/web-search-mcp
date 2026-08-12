@@ -16,6 +16,21 @@
 export type Backend = 'crawl4ai' | 'scrapling' | 'camoufox';
 
 /**
+ * Hosts that the plain datacenter browser serves BETTER than either stealth path.
+ *
+ * Counter-intuitive but measured. Trustpilot accepts Crawl4AI's datacenter IP
+ * (~4s, full page) while refusing the residential exit, and its wall is now a
+ * *managed* Cloudflare Turnstile that Scrapling's solver cannot clear — it loops
+ * "captcha is still present, solving again" until the 90s cap and then we fall
+ * back to Crawl4AI anyway. Sending it straight there turns a 90s timeout into a
+ * 4s success.
+ *
+ * A residential exit is not a strictly stronger option; for some origins it is
+ * the suspicious one.
+ */
+const CRAWL4AI_HOSTS = ['trustpilot.com'];
+
+/**
  * Hosts that must be fetched as an Italian residential visitor.
  *
  * `.it` covers the bulk of them, and is deliberately broad: for an Italian
@@ -65,5 +80,13 @@ export function isItalianSource(url: string): boolean {
  */
 export function pickBackend(url: string): Backend {
   if (isItalianSource(url)) return 'camoufox';
+  const host = hostOf(url);
+  if (host && matchesHost(host, CRAWL4AI_HOSTS)) return 'crawl4ai';
   return 'scrapling';
+}
+
+/** True when the plain datacenter browser is the right tool for this host. */
+export function prefersCrawl4ai(url: string): boolean {
+  const host = hostOf(url);
+  return !!host && matchesHost(host, CRAWL4AI_HOSTS);
 }
