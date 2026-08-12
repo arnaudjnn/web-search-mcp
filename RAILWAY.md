@@ -109,17 +109,25 @@ only right in one place:
 ```
 CRAWL4AI_URL       = http://${{Crawl4AI.RAILWAY_PRIVATE_DOMAIN}}:11235
 CRAWL4AI_API_TOKEN = ${{Crawl4AI.CRAWL4AI_API_TOKEN}}
-SCRAPLING_URL      = http://${{Scrapling.RAILWAY_PRIVATE_DOMAIN}}:8000
-CAMOUFOX_URL       = http://${{Camoufox.RAILWAY_PRIVATE_DOMAIN}}:8000
+SCRAPLING_URL      = http://${{Scrapling.RAILWAY_PRIVATE_DOMAIN}}:${{Scrapling.PORT}}
+CAMOUFOX_URL       = http://${{Camoufox.RAILWAY_PRIVATE_DOMAIN}}:${{Camoufox.PORT}}
 SEARXNG_URL        = http://${{SearXNG.RAILWAY_PRIVATE_DOMAIN}}:8080
 ```
 
-Reference the private DOMAIN, never `${{Service.PORT}}`. That variable is whatever
-someone set, not what the process binds: `Crawl4AI.PORT` read `8000` while the app
-listened on `11235`, so a `:${{Crawl4AI.PORT}}` URL silently pointed at a closed
-port and every fetch failed. Hardcode the port. Service names are also
-case-sensitive here — `${{camoufox.…}}` against a service named `Camoufox`
-resolves to an empty string rather than erroring, which yields `http://:8000`.
+Reference `${{Service.PORT}}` only where the service actually **binds** it and has
+no default of its own to diverge from. That holds for the two images in this repo:
+their CMD is `uvicorn --port ${PORT}` and they deliberately ship no `ENV PORT`, so
+the Railway variable is the single source of truth for both the bind and the URL,
+and a missing one stops the container at boot rather than yielding `http://host:`.
+
+It does not hold for the two third-party images, whose URLs keep literal ports:
+SearXNG hardcodes `--port 8080` in its entrypoint and Crawl4AI reads `port: 11235`
+from its own `config.yml`, so `PORT` is decoration on both and a reference to it is
+a guess that fails open. Crawl4AI's read `8000` while the app listened on `11235`,
+which pointed every fetch at a closed port.
+
+Service names are case-sensitive: `${{camoufox.…}}` against a service named
+`Camoufox` resolves to an empty string rather than erroring, giving `http://:8000`.
 
 ## Why Deploy Web Tools on Railway?
 
