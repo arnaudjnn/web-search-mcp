@@ -228,12 +228,18 @@ export async function web_fetch(params: Record<string, unknown>): Promise<ToolRe
             isError: true,
           }
         : { content: [{ type: 'text', text: md }], isError: false };
+    } else if (page.status === 200) {
+      // Fetched fine but the markdown render produced nothing. Retry the whole
+      // thing through Crawl4AI rather than reporting an empty page: it fetches
+      // and renders in one step, so it cannot hit this particular seam.
+      log(`web_fetch: no markdown from ${page.size} bytes (mode=${page.mode}); retrying via Crawl4AI`);
+      result = await crawl4aiFetch(url, filter, delay);
     } else {
       result = {
         content: [
           {
             type: 'text',
-            text: `web_fetch: scrapling returned HTTP ${page.status} with no extractable content (${page.size} bytes, mode=${page.mode}).`,
+            text: `web_fetch: upstream returned HTTP ${page.status} with no extractable content (${page.size} bytes, mode=${page.mode}).`,
           },
         ],
         isError: true,
@@ -302,13 +308,63 @@ export async function web_html(params: Record<string, unknown>): Promise<ToolRes
     };
     return trace('web_html', result);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log('web_html failed:', msg);
-    return trace('web_html', {
-      content: [{ type: 'text', text: `web_html error: ${msg}` }],
-      isError: true,
-    });
+    // Same fallback as web_fetch: a stack without the Scrapling service (i.e.
+    // deployed from the template before it existed) still gets HTML, just
+    // without residential egress or challenge solving.
+    log(
+      'web_html: scrapling unavailable, falling back to Crawl4AI:',
+      err instanceof Error ? err.message : String(err),
+    );
+    return trace('web_html', await crawl4aiHtml(url));
   }
+}
+
+/** Raw HTML via Crawl4AI. The fallback when Scrapling is unavailable. */
+async function crawl4aiHtml(url: string): Promise<ToolResult> {
+  return proxyCrawl4AI('crawl', async () => {
+    const resp = (await callCrawlTool({
+      urls: [url],
+      browser_config: {
+        type: 'BrowserConfig',
+        params: { headless: true, enable_stealth: true },
+      },
+      crawler_config: {
+        type: 'CrawlerRunConfig',
+        params: { wait_until: 'load', page_timeout: 60000, delay_before_return_html: 2 },
+      },
+    })) as ToolResult;
+
+    const text = resp?.content?.[0]?.text;
+    if (!text) return resp;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return resp;
+    }
+    const r = (parsed as { results?: Array<Record<string, unknown>> })?.results?.[0];
+    const html = typeof r?.html === 'string' ? r.html : '';
+    if (!html) return resp;
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            status: typeof r?.status_code === 'number' ? r.status_code : 200,
+            url,
+            // Report the engine honestly so a degraded stack is visible in the
+            // response rather than silently looking like a stealth fetch.
+            mode: 'crawl4ai',
+            escalated: false,
+            size: html.length,
+            html,
+          }),
+        },
+      ],
+      isError: false,
+    };
+  });
 }
 
 export async function web_screenshot(params: Record<string, unknown>): Promise<ToolResult> {
