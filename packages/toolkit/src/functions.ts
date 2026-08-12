@@ -332,6 +332,13 @@ export async function web_html(params: Record<string, unknown>): Promise<ToolRes
       ? params.timeout_ms
       : 60_000;
 
+  // Same host preference as web_fetch. Without this the two tools disagree about
+  // which backend serves a host, so the same URL is fast through one and pays a
+  // stealth timeout through the other.
+  if (prefersCrawl4ai(url)) {
+    return trace('web_html', await crawl4aiHtml(url));
+  }
+
   try {
     const page = isItalianSource(url)
       ? await camoufoxRender({
