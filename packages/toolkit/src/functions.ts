@@ -5,7 +5,7 @@ import {
   callPdfTool,
   callScreenshotTool,
 } from './crawl4ai.js';
-import { scraplingFetch, type ScraplingMode } from './scrapling.js';
+import { scraplingFetch } from './scrapling.js';
 import { searchSearXNG } from './searxng.js';
 import { getStats, recordCall, type ToolName } from './stats.js';
 import { getArchivedPage, getSnapshots } from './wayback.js';
@@ -197,7 +197,6 @@ export async function web_fetch(params: Record<string, unknown>): Promise<ToolRe
   const filter = ((params.f as string | undefined) ?? 'fit').toLowerCase();
   const delay =
     typeof params.delay === 'number' && Number.isFinite(params.delay) ? params.delay : 2;
-  const mode = params.mode as ScraplingMode | undefined;
 
   // Scrapling does the fetching. It is the only path with residential egress
   // and challenge solving, which Crawl4AI >= 0.9 cannot provide at all: on
@@ -206,7 +205,9 @@ export async function web_fetch(params: Record<string, unknown>): Promise<ToolRe
   // while Scrapling escalates into a real challenge solve.
   let result: ToolResult;
   try {
-    const page = await scraplingFetch({ url, mode, timeoutMs: 60_000 });
+    // No mode passed: the sidecar routes by host and escalates to a challenge
+    // solve only on evidence. Engine choice is deliberately not a tool input.
+    const page = await scraplingFetch({ url, timeoutMs: 60_000 });
     const md = page.html ? await htmlToMarkdown(page.html, filter) : null;
 
     if (md) {
@@ -269,7 +270,6 @@ export async function web_html(params: Record<string, unknown>): Promise<ToolRes
       isError: true,
     };
   }
-  const mode = params.mode as ScraplingMode | undefined;
   const timeoutMs =
     typeof params.timeout_ms === 'number' && Number.isFinite(params.timeout_ms)
       ? params.timeout_ms
@@ -278,7 +278,6 @@ export async function web_html(params: Record<string, unknown>): Promise<ToolRes
   try {
     const page = await scraplingFetch({
       url,
-      mode,
       timeoutMs,
       networkIdle: params.network_idle === true,
     });

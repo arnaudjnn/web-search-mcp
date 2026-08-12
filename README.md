@@ -37,6 +37,24 @@ hard 400. It also pins Chromium to its own localhost egress proxy, so a
 server-side proxy is overwritten. There is no supported way to give Crawl4AI a
 proxy, which is why residential egress lives in Scrapling.
 
+### Fetch strategy
+
+Callers never choose an engine. `web_fetch` and `web_html` take a URL; how to
+reach it is decided internally, in three tiers:
+
+| Tier | Egress | Chosen when |
+| --- | --- | --- |
+| `fast` | direct, no challenge solving | the default |
+| `stealth` | rotating residential proxy | host is known to wall datacenter IPs (LinkedIn's HTTP 999) |
+| `solve` | direct, solves the JS challenge | the `fast` response looks like a challenge page |
+
+`fast` is the default rather than `solve` even though `solve` is functionally a
+superset: solving roughly doubles latency on ordinary pages, and on a challenge
+it *cannot* solve it blocks for the whole timeout instead of failing fast. So
+solving is paid for only on evidence — a small body carrying a known
+interstitial title with a 403/429/503 gets retried once in `solve`, and the
+response reports `escalated: true`.
+
 So: **Scrapling fetches, Crawl4AI renders and does the browser work.**
 `web_fetch` and `web_html` fetch through Scrapling; `web_fetch` then renders
 that HTML to markdown through Crawl4AI's markdown pipeline (via its `raw://`
@@ -78,23 +96,13 @@ Scrapling, rendered to markdown by Crawl4AI.
 | `url`     | string (required) | URL to fetch                                                             |
 | `f`       | enum (optional)   | Content-filter strategy: `raw`, `fit`, `bm25`, or `llm` (default: `fit`) |
 | `q`       | string (optional) | Query string for BM25/LLM filters                                        |
-| `mode`    | enum (optional)   | `fast`, `stealth`, or `solve` — see below (default: routed by host)      |
 | `delay`   | number (optional) | Seconds to settle before extraction (default: 2)                         |
 
 Returns the page content as markdown.
 
-**Fetch modes.** Omit `mode` and the sidecar picks one by host, then
-auto-escalates to `solve` if the response looks like a challenge page:
-
-| Mode | Egress | Use for |
-| --- | --- | --- |
-| `fast` | direct, no challenge solving | most pages; the default |
-| `stealth` | rotating residential proxy | IP-reputation walls (LinkedIn's HTTP 999) |
-| `solve` | direct, solves the JS challenge | Cloudflare-style "Verifying Connection" walls |
-
-`fast` is the default rather than `solve` because challenge solving roughly
-doubles latency on ordinary pages and, on a challenge it cannot solve, blocks
-for the whole timeout instead of failing fast.
+**There is no engine or mode parameter.** Which fetcher runs, whether it goes
+out through the residential proxy, and whether it solves a JS challenge are all
+decided under the hood — see [Fetch strategy](#fetch-strategy).
 
 ### `web_html`
 
@@ -105,7 +113,6 @@ destroys — JSON-LD, meta tags, attributes.
 | Parameter      | Type              | Description                                             |
 | -------------- | ----------------- | ------------------------------------------------------- |
 | `url`          | string (required) | URL to fetch                                            |
-| `mode`         | enum (optional)   | `fast`, `stealth`, or `solve` (default: routed by host)  |
 | `network_idle` | boolean (optional)| Wait for the network to go quiet (default: false)        |
 | `timeout_ms`   | number (optional) | Upstream fetch timeout (default: 60000)                 |
 

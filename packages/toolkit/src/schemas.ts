@@ -27,16 +27,13 @@ export const WebFetchInput = z.object({
   provider: z.string().optional().describe('LLM provider for LLM filter (e.g. "openai/gpt-4")'),
   temperature: z.number().optional().describe('Temperature for LLM filter'),
   base_url: z.string().optional().describe('Base URL override for the LLM provider'),
-  mode: z
-    .enum(['fast', 'stealth', 'solve'])
-    .optional()
-    .describe(
-      'Fetch strategy. fast = direct (default for most hosts). stealth = residential ' +
-        'proxy, for IP-reputation walls such as LinkedIn (HTTP 999). solve = solve the ' +
-        'JS challenge, for Cloudflare-style "Verifying Connection" walls. Omit to route ' +
-        'by host and auto-escalate to solve when a challenge is detected.',
-    ),
-  // No session_id: Crawl4AI >= 0.9 lists session_id among the fields an
+  // No engine/mode knob on purpose. Which fetcher runs, whether it goes out
+  // through the residential proxy, and whether it solves a JS challenge are
+  // decided under the hood (by host, then by escalation on evidence of a
+  // challenge). Callers ask for a URL; picking the way to reach it is this
+  // service's job, not theirs.
+  //
+  // No session_id either: Crawl4AI >= 0.9 lists session_id among the fields an
   // untrusted request body may not set, so passing it is a hard 400.
   delay: z
     .number()
@@ -48,15 +45,7 @@ export const WebFetchInput = z.object({
 
 export const WebHtmlInput = z.object({
   url: z.string().url().describe('URL to fetch'),
-  mode: z
-    .enum(['fast', 'stealth', 'solve'])
-    .optional()
-    .describe(
-      'Fetch strategy. fast = direct (default for most hosts). stealth = residential ' +
-        'proxy, for IP-reputation walls such as LinkedIn (HTTP 999). solve = solve the ' +
-        'JS challenge, for Cloudflare-style walls. Omit to route by host and ' +
-        'auto-escalate to solve when a challenge is detected.',
-    ),
+  // No engine/mode knob — see WebFetchInput.
   network_idle: z
     .boolean()
     .optional()
