@@ -92,17 +92,34 @@ warmed anti-bot session cannot be shared across processes. Use
 existing regions — pass `us-east=0` to move rather than spread, or you get replicas
 on two continents and a transatlantic round trip per request.
 
+**Give only the Web Tools Server a public domain.** It is the authenticated front
+door; the other five talk over Railway's private network and should have no domain
+at all. SearXNG in particular has no authentication of its own, so a public domain
+makes it an open search proxy whose outgoing requests spend your metered
+`PROXY_URL` bandwidth — and `SEARXNG_SECRET_KEY` does not change that, because it is
+an internal signing secret, not a credential. `CRAWL4AI_API_TOKEN` *is* a
+credential, and it is the only thing between an exposed Crawl4AI and free use of
+your browser fleet. Removing the domain is what makes a service private; removing
+its credentials just makes it broken or open.
+
 **Wire the services together with reference variables** rather than hardcoded
 `*.railway.internal` hostnames, so the wiring survives a rename and each port is
 only right in one place:
 
 ```
-CRAWL4AI_URL       = http://${{Crawl4AI.RAILWAY_PRIVATE_DOMAIN}}:${{Crawl4AI.PORT}}
+CRAWL4AI_URL       = http://${{Crawl4AI.RAILWAY_PRIVATE_DOMAIN}}:11235
 CRAWL4AI_API_TOKEN = ${{Crawl4AI.CRAWL4AI_API_TOKEN}}
-SCRAPLING_URL      = http://${{Scrapling.RAILWAY_PRIVATE_DOMAIN}}:${{Scrapling.PORT}}
-CAMOUFOX_URL       = http://${{camoufox.RAILWAY_PRIVATE_DOMAIN}}:${{camoufox.PORT}}
+SCRAPLING_URL      = http://${{Scrapling.RAILWAY_PRIVATE_DOMAIN}}:8000
+CAMOUFOX_URL       = http://${{Camoufox.RAILWAY_PRIVATE_DOMAIN}}:8000
 SEARXNG_URL        = http://${{SearXNG.RAILWAY_PRIVATE_DOMAIN}}:8080
 ```
+
+Reference the private DOMAIN, never `${{Service.PORT}}`. That variable is whatever
+someone set, not what the process binds: `Crawl4AI.PORT` read `8000` while the app
+listened on `11235`, so a `:${{Crawl4AI.PORT}}` URL silently pointed at a closed
+port and every fetch failed. Hardcode the port. Service names are also
+case-sensitive here — `${{camoufox.…}}` against a service named `Camoufox`
+resolves to an empty string rather than erroring, which yields `http://:8000`.
 
 ## Why Deploy Web Tools on Railway?
 

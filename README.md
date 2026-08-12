@@ -384,12 +384,19 @@ hardcoded hostnames, so renaming or moving a service does not silently break
 private networking:
 
 ```
-CRAWL4AI_URL       = http://${{Crawl4AI.RAILWAY_PRIVATE_DOMAIN}}:${{Crawl4AI.PORT}}
+CRAWL4AI_URL       = http://${{Crawl4AI.RAILWAY_PRIVATE_DOMAIN}}:11235
 CRAWL4AI_API_TOKEN = ${{Crawl4AI.CRAWL4AI_API_TOKEN}}
-SCRAPLING_URL      = http://${{Scrapling.RAILWAY_PRIVATE_DOMAIN}}:${{Scrapling.PORT}}
-CAMOUFOX_URL       = http://${{camoufox.RAILWAY_PRIVATE_DOMAIN}}:${{camoufox.PORT}}
+SCRAPLING_URL      = http://${{Scrapling.RAILWAY_PRIVATE_DOMAIN}}:8000
+CAMOUFOX_URL       = http://${{Camoufox.RAILWAY_PRIVATE_DOMAIN}}:8000
 SEARXNG_URL        = http://${{SearXNG.RAILWAY_PRIVATE_DOMAIN}}:8080
 ```
+
+Reference the private DOMAIN, never `${{Service.PORT}}` — that variable is whatever
+someone set, not what the process binds. `Crawl4AI.PORT` read `8000` while the app
+listened on `11235`, so the URL silently pointed at a closed port and every fetch
+failed. Service names are case-sensitive too: `${{camoufox.…}}` against a service
+named `Camoufox` resolves to an empty string rather than erroring, giving
+`http://:8000`.
 
 ## Quick Start (Local)
 
@@ -407,38 +414,63 @@ pnpm install
 cp .env.example .env.local
 ```
 
-### 3. Point the server at the backing services
+### 3. Run the sidecars you need, locally
 
-There is no local compose stack. The four backing services are heavy — two of them
-bake a browser into their image, and the residential paths are useless without a
-proxy credential — so running them locally costs a long build to reproduce
-something the deployment already has. Run the server locally against the deployed
-services instead:
+Only the **Tools** service has a public domain. The four backing services are
+private — reachable at `*.railway.internal` from inside the project and from
+nowhere else — so a laptop cannot point at them, by design (see
+[Exposure](#exposure)).
+
+For most work you do not need them. Run the server against whichever sidecars you
+build locally; each is self-contained, and every URL is optional:
 
 ```bash
+docker build -t searxng services/searxng && docker run -d -p 8080:8080 \
+  -e SEARXNG_SECRET_KEY=dev -e SEARXNG_REDIS_URL=redis://host.docker.internal:6379/0 searxng
+docker run -d -p 6379:6379 redis:7-alpine
+docker run -d -p 11235:11235 -e CRAWL4AI_API_TOKEN=dev unclecode/crawl4ai:0.9.2
+
 API_KEY=any-local-value \
-SEARXNG_URL=https://searxng-production-xxxx.up.railway.app \
-CRAWL4AI_URL=https://crawl4ai-production-xxxx.up.railway.app \
-CRAWL4AI_API_TOKEN=... \
-SCRAPLING_URL=https://your-scrapling.up.railway.app \
-CAMOUFOX_URL=https://your-camoufox.up.railway.app \
+SEARXNG_URL=http://localhost:8080 \
+CRAWL4AI_URL=http://localhost:11235 \
+CRAWL4AI_API_TOKEN=dev \
 pnpm run start
 ```
 
-The server is available at `http://localhost:3000`. `API_KEY` is required but is
-whatever you want locally — it only guards your own endpoint.
+The server is at `http://localhost:3000`. `API_KEY` is required but arbitrary
+locally — it only guards your own endpoint.
 
-Every URL is optional and degrades rather than fails: with `SEARXNG_URL` alone you
-get `web_search`; with `CRAWL4AI_URL` you get `web_crawl` / `web_screenshot` /
-`web_pdf` and markdown rendering. `web_fetch` and `web_html` fall back to Crawl4AI
-when the stealth sidecars are unreachable, so a partial local setup still answers.
+Leave a URL out and that path degrades rather than fails: `SEARXNG_URL` alone gives
+you `web_search`; `CRAWL4AI_URL` gives `web_crawl` / `web_screenshot` / `web_pdf`
+and markdown rendering; `web_fetch` and `web_html` fall back to Crawl4AI when the
+stealth sidecars are absent. The two stealth sidecars each bake a browser into
+their image (~200MB Chromium for Scrapling, Camoufox's Firefox plus a GeoIP
+database), and their residential paths need a `PROXY_URL` you supply — build them
+only when you are working on those paths specifically.
 
-To run a single sidecar locally, build it directly — each is self-contained:
+If you genuinely need to reach a deployed sidecar from your machine, add a service
+domain temporarily (`railway domain --service Crawl4AI`) and delete it when you are
+done. Do not leave one on: an exposed SearXNG is an open search proxy that spends
+your metered residential bandwidth.
 
-```bash
-docker build -t scrapling services/scrapling && \
-  docker run -p 8000:8000 -e PROXY_URL=... scrapling
-```
+## Exposure
+
+**Only `Tools` should have a public domain.** It is the authenticated front door
+(`API_KEY` as a Bearer token); everything behind it talks over Railway's private
+network:
+
+| Service | Public domain | Why |
+| --- | --- | --- |
+| Tools | **yes** | the API surface — MCP + REST, API-key guarded |
+| SearXNG | no | it has **no authentication of its own**, so a public domain is an open search proxy — and its outgoing requests egress through your metered `PROXY_URL` |
+| Crawl4AI | no | `CRAWL4AI_API_TOKEN` is the only thing between a public domain and free use of your browser fleet |
+| Scrapling | no | residential egress; nothing should reach it but Tools |
+| Camoufox | no | residential egress + warmed anti-bot sessions |
+
+`SEARXNG_SECRET_KEY` is not an access credential — it is SearXNG's internal
+signing secret, needed whether or not the service is exposed. Removing a public
+domain is what makes a service private; deleting its credentials just makes it
+broken or open.
 
 ## Environment Variables
 
