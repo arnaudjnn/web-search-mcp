@@ -113,13 +113,6 @@ export async function web_search(params: {
   return results.data;
 }
 
-// Chromium flags required to launch reliably inside a container. Railway (and most
-// container hosts) give a tiny /dev/shm, which crashes Chromium on launch
-// ("BrowserType.launch: Connection closed while reading from the driver"), and the
-// sandbox must be disabled in an unprivileged container. Applied to every browser we
-// drive through Crawl4AI so the template works out of the box.
-const CONTAINER_BROWSER_ARGS = ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu'];
-
 export async function web_fetch(params: Record<string, unknown>): Promise<ToolResult> {
   // The upstream Crawl4AI `md` MCP tool is unstable on this version
   // (BrowserContext.new_page: Connection closed while reading from the driver).
@@ -137,11 +130,7 @@ export async function web_fetch(params: Record<string, unknown>): Promise<ToolRe
   // enable_stealth + wait_until:"load" + delay 15s + Italian residential proxy.
   // We deliberately do NOT enable magic/simulate_user/override_navigator —
   // those trigger Crawl4AI's pre-emptive CF detection and fingerprint as bot.
-  const browserParams: Record<string, unknown> = {
-    headless: true,
-    enable_stealth: true,
-    extra_args: CONTAINER_BROWSER_ARGS,
-  };
+  const browserParams: Record<string, unknown> = { headless: true, enable_stealth: true };
   if (Config.proxy) {
     browserParams.proxy_config = {
       type: 'ProxyConfig',
@@ -238,7 +227,6 @@ export async function web_crawl(params: Record<string, unknown>): Promise<ToolRe
         params: {
           headless: true,
           enable_stealth: true,
-          extra_args: CONTAINER_BROWSER_ARGS,
           ...bcParams,
           ...(needProxy
             ? {
