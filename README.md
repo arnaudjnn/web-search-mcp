@@ -323,10 +323,31 @@ claude mcp add web_tools --scope user \
 
 The **Web Tools Server** service uses the root `Dockerfile` — no config changes needed.
 
-The **SearXNG** service should build from the repo instead of a Docker image:
-- **Source**: same GitHub repo
-- **Root Directory**: `services/searxng`
-- **Optional env var**: `PROXY_URL` — proxy for outgoing search requests (e.g. `socks5://user:pass@host:port`)
+The **SearXNG** and **Scrapling** services build from the repo instead of a Docker
+image, and each one **must** have its Root Directory set:
+
+| Service | Root Directory | Env |
+| --- | --- | --- |
+| SearXNG | `services/searxng` | `PROXY_URL` (optional) — proxy for outgoing search requests |
+| Scrapling | `services/scrapling` | `PROXY_URL` (required for the residential-egress path), `PORT=8000` |
+
+> **Set Root Directory before the first deploy.** Railway resolves a service's
+> build config by walking up from its Root Directory, so a subfolder service
+> without one inherits the repo root's `Dockerfile` — which is the Node server.
+> The symptom is confusing: the build goes green, then the container crashes on
+> `ZodError: API_KEY Required`, because it is running the API server instead of
+> the sidecar. Root Directory is a dashboard field; the CLI cannot set it.
+
+Point the server at its siblings with **reference variables** rather than
+hardcoded hostnames, so renaming or moving a service does not silently break
+private networking:
+
+```
+CRAWL4AI_URL       = http://${{Crawl4AI.RAILWAY_PRIVATE_DOMAIN}}:${{Crawl4AI.PORT}}
+CRAWL4AI_API_TOKEN = ${{Crawl4AI.CRAWL4AI_API_TOKEN}}
+SCRAPLING_URL      = http://${{Scrapling.RAILWAY_PRIVATE_DOMAIN}}:${{Scrapling.PORT}}
+SEARXNG_URL        = http://${{SearXNG.RAILWAY_PRIVATE_DOMAIN}}:8080
+```
 
 ## Quick Start (Local)
 
