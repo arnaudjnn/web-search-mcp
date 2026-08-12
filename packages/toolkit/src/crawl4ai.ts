@@ -55,6 +55,43 @@ async function call(name: string, args: Record<string, unknown>) {
 }
 
 /**
+ * Give a `raw://` document the origin it lost.
+ *
+ * Crawl4AI resolves relative hrefs against the URL it fetched, but a raw:// body
+ * was not fetched from anywhere, so it has no base and every relative link is
+ * emitted verbatim: `](/users/abc)` instead of
+ * `](https://www.trustpilot.com/users/abc)`. That silently degrades every page we
+ * fetch through Scrapling and render here — measured on a Trustpilot review page,
+ * 24 author links came out relative and unusable, which read to the caller as a
+ * page with no reviews on it at all.
+ *
+ * CrawlerRunConfig.base_url would be the direct fix, but it is one of the fields
+ * Crawl4AI >= 0.9 forbids from a request body. A `<base href>` in the document
+ * gets the same job done and travels with the HTML.
+ */
+function withBaseHref(html: string, sourceUrl?: string): string {
+  if (!sourceUrl) return html;
+  // Respect a base the page already declares — overriding it would break links
+  // the site deliberately rebased.
+  if (/<base\s[^>]*href=/i.test(html)) return html;
+
+  let origin: string;
+  try {
+    origin = new URL(sourceUrl).origin + '/';
+  } catch {
+    return html;
+  }
+
+  const tag = `<base href="${origin}">`;
+  const headMatch = html.match(/<head[^>]*>/i);
+  if (headMatch?.index !== undefined) {
+    const at = headMatch.index + headMatch[0].length;
+    return html.slice(0, at) + tag + html.slice(at);
+  }
+  return tag + html;
+}
+
+/**
  * Render HTML to markdown via Crawl4AI's REST `/md` endpoint and its `raw://`
  * input scheme (no network I/O on its side).
  *
@@ -74,6 +111,7 @@ export async function renderMarkdown(
   html: string,
   filter: string,
   query?: string,
+  sourceUrl?: string,
 ): Promise<string | null> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (Config.crawl4ai.apiToken) {
@@ -84,7 +122,7 @@ export async function renderMarkdown(
     method: 'POST',
     headers,
     body: JSON.stringify({
-      url: `raw://${html}`,
+      url: `raw://${withBaseHref(html, sourceUrl)}`,
       f: filter,
       ...(query ? { q: query } : {}),
     }),

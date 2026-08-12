@@ -174,8 +174,9 @@ async function htmlToMarkdown(
   html: string,
   filter: string,
   query?: string,
+  sourceUrl?: string,
 ): Promise<string | null> {
-  return renderMarkdown(html, filter, query);
+  return renderMarkdown(html, filter, query, sourceUrl);
 }
 
 /** Fetch a URL through Crawl4AI directly. The fallback when Scrapling is down. */
@@ -232,8 +233,10 @@ export async function web_fetch(params: Record<string, unknown>): Promise<ToolRe
     // No mode passed: the sidecar routes by host and escalates to a challenge
     // solve only on evidence. Engine choice is deliberately not a tool input.
     const page = await scraplingFetch({ url, timeoutMs: 60_000 });
+    // Pass the URL we actually landed on (after redirects) so relative links
+    // resolve against the right origin.
     const md = page.html
-      ? await htmlToMarkdown(page.html, filter, params.q as string | undefined)
+      ? await htmlToMarkdown(page.html, filter, params.q as string | undefined, page.url || url)
       : null;
 
     if (md) {
