@@ -27,9 +27,13 @@ const ITALIAN_SUFFIXES = [
 ];
 
 const ITALIAN_HOSTS: string[] = [
-  // Italian sources that do not live under .it. Add here rather than widening
-  // the suffix list, so the blast radius of a new entry is one host.
-  'doctrine.it',
+  // Italian sources that do NOT live under .it, which the suffix rule would
+  // therefore miss. This list is the whole reason the suffix rule is not enough:
+  // altalex.com is an Italian legal-commentary source behind Cloudflare/SSO, and
+  // routing it to a US exit sends the wrong visitor to a site that is gated on
+  // being the right one. Add here rather than widening the suffix list, so the
+  // blast radius of a new entry is one host.
+  'altalex.com',
 ];
 
 function hostOf(url: string): string | null {
