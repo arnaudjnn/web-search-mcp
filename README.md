@@ -331,12 +331,34 @@ image, and each one **must** have its Root Directory set:
 | SearXNG | `services/searxng` | `PROXY_URL` (optional) — proxy for outgoing search requests |
 | Scrapling | `services/scrapling` | `PROXY_URL` (required for the residential-egress path), `PORT=8000` |
 
-> **Set Root Directory before the first deploy.** Railway resolves a service's
+> **Set Root Directory before connecting the repo.** Railway resolves a service's
 > build config by walking up from its Root Directory, so a subfolder service
 > without one inherits the repo root's `Dockerfile` — which is the Node server.
 > The symptom is confusing: the build goes green, then the container crashes on
 > `ZodError: API_KEY Required`, because it is running the API server instead of
-> the sidecar. Root Directory is a dashboard field; the CLI cannot set it.
+> the sidecar. It also repeats on every push, so a service deployed correctly by
+> hand will replace itself with the API server the next time the repo changes.
+>
+> `railway up` cannot fix this — it uploads the right files but leaves the stored
+> config pointing at `/`. Root Directory is not exposed by the CLI either; set it
+> in the dashboard, or via the public API:
+>
+> ```bash
+> curl https://backboard.railway.com/graphql/v2 \
+>   -H "Authorization: Bearer $RAILWAY_TOKEN" -H "Content-Type: application/json" \
+>   -d '{"query":"mutation($s:String!,$e:String,$i:ServiceInstanceUpdateInput!){serviceInstanceUpdate(serviceId:$s,environmentId:$e,input:$i)}",
+>        "variables":{"s":"<serviceId>","e":"<environmentId>",
+>        "i":{"rootDirectory":"/services/scrapling",
+>             "dockerfilePath":"/services/scrapling/Dockerfile",
+>             "watchPatterns":["/services/scrapling/**"]}}}'
+> ```
+>
+> Do not pass `builder` — the `Builder` enum has no `DOCKERFILE` value (only
+> HEROKU/NIXPACKS/PAKETO/RAILPACK) and the whole mutation fails with a generic
+> "Problem processing request". Railway detects the Dockerfile from the path.
+>
+> The anchored `watchPatterns` is worth setting too: without it every push to the
+> repo rebuilds the sidecar, including pushes that do not touch it.
 
 Point the server at its siblings with **reference variables** rather than
 hardcoded hostnames, so renaming or moving a service does not silently break
