@@ -30,12 +30,20 @@ RUN scrapling install \
 
 COPY app.py .
 
-# WORKERS is lower than a single-session service would want: each worker can
-# lazily build up to one browser PER MODE (fast / stealth / solve), so the
-# worst-case browser count is WORKERS * 3 at ~200-300MB each. At 3 workers that
-# is up to 9 live browsers, which is more than this container's memory wants;
-# 2 keeps the worst case near ~1.5GB while still serving requests in parallel.
-ENV PORT=8000 WORKERS=2
+# WORKERS=1. Each worker lazily builds up to one browser PER MODE (fast /
+# stealth / solve), so the worst case is WORKERS * 3 live Chromium instances.
+#
+# 2 was not survivable. Six browsers exhausted the container's THREAD budget, not
+# its memory — Chromium died on `pthread_create: Resource temporarily unavailable
+# (11)` and every fetch afterwards returned 502 or timed out, so LinkedIn silently
+# fell back to the datacenter IP. The earlier sizing note reasoned about ~300MB
+# per browser and missed that the binding limit here is threads/PIDs.
+#
+# The parallelism lost is smaller than it looks: each mode already serialises on
+# its own single-slot executor, so a second worker only helped when two requests
+# of the SAME mode overlapped. Scale with replicas instead — a replica is a fresh
+# container with its own budget, which is what the Camoufox service does.
+ENV PORT=8000 WORKERS=1
 EXPOSE 8000
 # Bind to 0.0.0.0. Railway's edge router talks IPv4 to the container
 # (so an IPv6-only bind returns 502), and Railway's private DNS for
