@@ -4,6 +4,7 @@ import {
   callMdTool,
   callPdfTool,
   callScreenshotTool,
+  renderMarkdown,
 } from './crawl4ai.js';
 import { scraplingFetch } from './scrapling.js';
 import { searchSearXNG } from './searxng.js';
@@ -162,18 +163,19 @@ function markdownFromCrawlResult(
 
 /**
  * Render already-fetched HTML to markdown using Crawl4AI's own markdown
- * pipeline, via its `raw://` input scheme. This is what lets the fetch move to
- * Scrapling without changing web_fetch's output contract: the `f` filter
- * (raw/fit/bm25/llm) is implemented by Crawl4AI's markdown generator, so
- * reimplementing HTML->markdown here would silently change every caller's
- * output. Crawl4AI does no network I/O for a raw:// input.
+ * pipeline. This is what lets the fetch move to Scrapling without changing
+ * web_fetch's output contract: the `f` filter (raw/fit/bm25/llm) is implemented
+ * by Crawl4AI's markdown generator, so reimplementing HTML->markdown here would
+ * silently change every caller's output.
+ *
+ * Goes over REST, not MCP — see renderMarkdown() for the 100x reason.
  */
-async function htmlToMarkdown(html: string, filter: string): Promise<string | null> {
-  const resp = (await callCrawlTool({
-    urls: [`raw://${html}`],
-    crawler_config: { type: 'CrawlerRunConfig', params: { wait_until: 'load' } },
-  })) as ToolResult;
-  return markdownFromCrawlResult(resp, filter)?.md ?? null;
+async function htmlToMarkdown(
+  html: string,
+  filter: string,
+  query?: string,
+): Promise<string | null> {
+  return renderMarkdown(html, filter, query);
 }
 
 /** Fetch a URL through Crawl4AI directly. The fallback when Scrapling is down. */
@@ -230,7 +232,9 @@ export async function web_fetch(params: Record<string, unknown>): Promise<ToolRe
     // No mode passed: the sidecar routes by host and escalates to a challenge
     // solve only on evidence. Engine choice is deliberately not a tool input.
     const page = await scraplingFetch({ url, timeoutMs: 60_000 });
-    const md = page.html ? await htmlToMarkdown(page.html, filter) : null;
+    const md = page.html
+      ? await htmlToMarkdown(page.html, filter, params.q as string | undefined)
+      : null;
 
     if (md) {
       // A block/challenge page converts to markdown perfectly well, so the

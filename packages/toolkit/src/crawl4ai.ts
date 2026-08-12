@@ -54,6 +54,52 @@ async function call(name: string, args: Record<string, unknown>) {
   }
 }
 
+/**
+ * Render HTML to markdown via Crawl4AI's REST `/md` endpoint and its `raw://`
+ * input scheme (no network I/O on its side).
+ *
+ * This deliberately does NOT go through the MCP client above. Pushing a large
+ * document through the MCP SSE transport is pathologically slow — measured on a
+ * 1.27MB Trustpilot page:
+ *
+ *   MCP `crawl` tool with raw://   ~100s
+ *   REST /crawl     with raw://      3.7s
+ *   REST /md        with raw://      0.8s
+ *
+ * so a two-hop fetch-then-render web_fetch took 110s over MCP and ~9s here. /md
+ * also takes the `f` filter (raw/fit/bm25/llm) natively, which is exactly
+ * web_fetch's contract.
+ */
+export async function renderMarkdown(
+  html: string,
+  filter: string,
+  query?: string,
+): Promise<string | null> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (Config.crawl4ai.apiToken) {
+    headers['Authorization'] = `Bearer ${Config.crawl4ai.apiToken}`;
+  }
+
+  const response = await fetch(new URL('/md', Config.crawl4ai.url), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      url: `raw://${html}`,
+      f: filter,
+      ...(query ? { q: query } : {}),
+    }),
+    signal: AbortSignal.timeout(60_000),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Crawl4AI /md HTTP ${response.status}: ${body.slice(0, 300)}`);
+  }
+
+  const data = (await response.json()) as { markdown?: string; success?: boolean };
+  return data.markdown || null;
+}
+
 export const callCrawlTool = (args: Record<string, unknown>) => call('crawl', args);
 export const callMdTool = (args: Record<string, unknown>) => call('md', args);
 export const callScreenshotTool = (args: Record<string, unknown>) => call('screenshot', args);
