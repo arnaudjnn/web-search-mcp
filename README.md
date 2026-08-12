@@ -407,35 +407,37 @@ pnpm install
 cp .env.example .env.local
 ```
 
-### 3. Start the local stack
+### 3. Point the server at the backing services
+
+There is no local compose stack. The four backing services are heavy — two of them
+bake a browser into their image, and the residential paths are useless without a
+proxy credential — so running them locally costs a long build to reproduce
+something the deployment already has. Run the server locally against the deployed
+services instead:
 
 ```bash
-docker compose up -d redis searxng crawl4ai scrapling camoufox
-```
-
-That starts the five backing services. Then run the server against them:
-
-```bash
-SEARXNG_URL=http://localhost:8080 \
-CRAWL4AI_URL=http://localhost:11235 \
-SCRAPLING_URL=http://localhost:8000 \
-CAMOUFOX_URL=http://localhost:8001 \
+API_KEY=any-local-value \
+SEARXNG_URL=https://searxng-production-xxxx.up.railway.app \
+CRAWL4AI_URL=https://crawl4ai-production-xxxx.up.railway.app \
+CRAWL4AI_API_TOKEN=... \
+SCRAPLING_URL=https://your-scrapling.up.railway.app \
+CAMOUFOX_URL=https://your-camoufox.up.railway.app \
 pnpm run start
 ```
 
-The two browser sidecars each download a browser at image-build time (~200MB
-Chromium for Scrapling, Camoufox's Firefox build plus a GeoIP database), so the
-first `docker compose up` is slow. Bring up only what you need: Redis and SearXNG
-alone are enough for `web_search`, and Crawl4AI alone for `web_crawl` /
-`web_screenshot` / `web_pdf`. Residential egress needs a `PROXY_URL` you supply —
-without one, `web_fetch` still works via the direct paths.
+The server is available at `http://localhost:3000`. `API_KEY` is required but is
+whatever you want locally — it only guards your own endpoint.
 
-The server is available at `http://localhost:3000`.
+Every URL is optional and degrades rather than fails: with `SEARXNG_URL` alone you
+get `web_search`; with `CRAWL4AI_URL` you get `web_crawl` / `web_screenshot` /
+`web_pdf` and markdown rendering. `web_fetch` and `web_html` fall back to Crawl4AI
+when the stealth sidecars are unreachable, so a partial local setup still answers.
 
-### 4. Or run everything in Docker
+To run a single sidecar locally, build it directly — each is self-contained:
 
 ```bash
-docker compose up
+docker build -t scrapling services/scrapling && \
+  docker run -p 8000:8000 -e PROXY_URL=... scrapling
 ```
 
 ## Environment Variables
