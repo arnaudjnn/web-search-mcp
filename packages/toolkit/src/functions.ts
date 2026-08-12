@@ -1,4 +1,3 @@
-import { Config } from './config.js';
 import {
   callCrawlTool,
   callExecuteJsTool,
@@ -6,37 +5,31 @@ import {
   callPdfTool,
   callScreenshotTool,
 } from './crawl4ai.js';
-import { noteBlocked, noteSuccess } from './rotation.js';
 import { searchSearXNG } from './searxng.js';
 import { getStats, recordCall, type ToolName } from './stats.js';
 import { getArchivedPage, getSnapshots } from './wayback.js';
 import type { ToolResult } from './types.js';
 
-// Regex matching upstream Crawl4AI failure modes that benefit from a
-// browser rotation: explicit anti-bot signals (429, CF challenge) AND
-// internal Crawl4AI errors that almost always trace back to a wedged
-// browser context (BrowserContext closed, navigation timeout,
-// "Unexpected error in _crawl_web"). When we see any of these we
-// signal the rotation module to kill the hot browser — Crawl4AI
-// spawns a fresh one with a fresh proxy connection on the next call.
+// Upstream failure modes worth counting as errors in /stats even when
+// Crawl4AI reports them as a 200 with the error JSON in the body: explicit
+// anti-bot signals (429, CF challenge) and internal errors that trace back to
+// a wedged browser context. Note Crawl4AI >= 0.9 also surfaces a plain
+// anti-bot 403 as an opaque HTTP 500 + correlation id, so a 500 from it is not
+// necessarily a server fault.
 const BLOCK_RE =
   /HTTP 429|Too Many Requests|Cloudflare JS challenge|anti-bot protection|Just a moment\.\.\.|Unexpected error in _crawl_web|BrowserContext\.new_page|Navigation timeout|Connection closed while reading from the driver/i;
 
-// Count a tool invocation: bytes = size of the text payload we hand
-// back to the caller. For Crawl4AI tools this is the rendered HTML or
-// markdown, which closely tracks proxy bandwidth (what iProyal bills).
-// Also feeds the rotation module: anti-bot signals in the returned
-// payload count toward the consecutive-429 threshold that triggers a
-// browser kill (and thus an upstream IP rotation).
+// Count a tool invocation: bytes = size of the text payload we hand back to
+// the caller. There is deliberately no browser-rotation hook here any more.
+// The old rotation module killed Crawl4AI's hot browser on N consecutive
+// blocks so the next call would re-dial the residential proxy and land on a
+// fresh exit IP. Crawl4AI >= 0.9 rejects proxy_config outright, so there is no
+// proxy connection to re-dial: killing browsers could not change our egress IP,
+// it only churned the pool on every LinkedIn 999.
 function trace(tool: ToolName, result: ToolResult): ToolResult {
   const text = result.content?.[0]?.text ?? '';
   const blocked = BLOCK_RE.test(text);
-  // Crawl4AI sometimes wraps upstream failures as 200-content with the
-  // error JSON in the text and isError absent — count those as errors
-  // too so /stats and the rotation counter see them.
   recordCall(tool, text.length, !!result.isError || blocked);
-  if (blocked) noteBlocked();
-  else if (text) noteSuccess();
   return result;
 }
 function traceJson(tool: ToolName, payload: unknown): void {
@@ -126,31 +119,19 @@ export async function web_fetch(params: Record<string, unknown>): Promise<ToolRe
   }
   const filter = ((params.f as string | undefined) ?? 'fit').toLowerCase();
 
-  // Recipe verified 5/5 against ufficiocamerale.it (Cloudflare-protected):
-  // enable_stealth + wait_until:"load" + delay 15s + Italian residential proxy.
-  // We deliberately do NOT enable magic/simulate_user/override_navigator —
-  // those trigger Crawl4AI's pre-emptive CF detection and fingerprint as bot.
+  // Only fields Crawl4AI >= 0.9 still accepts from a request body. The old
+  // recipe here (proxy_config + session_id + page_timeout 120000) is gone:
+  //  - proxy_config / session_id are UNTRUSTED_FORBIDDEN_FIELDS -> hard 400,
+  //    which is why 100% of web_fetch calls were failing.
+  //  - page_timeout is clamped to 60s server-side, so ask for 60s honestly.
+  // Do NOT add user_agent_mode:'random' — see stripPoolHostileFields().
   const browserParams: Record<string, unknown> = { headless: true, enable_stealth: true };
-  if (Config.proxy) {
-    browserParams.proxy_config = {
-      type: 'ProxyConfig',
-      params: {
-        server: Config.proxy.server,
-        username: Config.proxy.username,
-        password: Config.proxy.password,
-      },
-    };
-  }
 
-  // Optional Crawl4AI session_id — when callers pass the same id across
-  // calls, Crawl4AI reuses the browser context, so the cf_clearance
-  // cookie set on the first call carries over and subsequent calls skip
-  // the JS challenge (~25s → ~3s).
-  const sessionId = typeof params.session_id === 'string' ? params.session_id : undefined;
-  // Override delay_before_return_html — useful for "warm" calls in an
-  // existing session where CF is already cleared.
+  // Seconds to settle before extracting HTML. The old default was 15s, chosen
+  // for a JS-challenge recipe that depended on the (now impossible) proxy and
+  // session reuse; without those it was 15s of dead latency on every fetch.
   const delay =
-    typeof params.delay === 'number' && Number.isFinite(params.delay) ? params.delay : 15;
+    typeof params.delay === 'number' && Number.isFinite(params.delay) ? params.delay : 2;
 
   return proxyCrawl4AI('crawl', async () => {
     const resp = (await callCrawlTool({
@@ -160,9 +141,8 @@ export async function web_fetch(params: Record<string, unknown>): Promise<ToolRe
         type: 'CrawlerRunConfig',
         params: {
           wait_until: 'load',
-          page_timeout: 120000,
+          page_timeout: 60000,
           delay_before_return_html: delay,
-          ...(sessionId ? { session_id: sessionId } : {}),
         },
       },
     })) as ToolResult;
@@ -212,38 +192,42 @@ export async function web_execute_js(params: Record<string, unknown>): Promise<T
   );
 }
 
+// Crawl4AI pools browsers by a SHA1 of the ENTIRE BrowserConfig
+// (crawler_pool._sig), so any field that varies per request mints a brand new
+// ~180MB Chromium that is never reused. `user_agent_mode: 'random'` does
+// exactly that: measured 10 live browsers / 1890MB / reuse_rate_percent: 0,
+// then `RuntimeError: can't start new thread` — after which the service 500s
+// on EVERY request, not just the crawl that caused it. A caller asking for it
+// would take down web_screenshot/web_pdf/web_crawl along with itself, so drop
+// it here rather than trusting callers. A fixed `user_agent` string is fine:
+// it is one stable signature, and was measured at 100% pool reuse.
+function stripPoolHostileFields(bcParams: Record<string, unknown>): Record<string, unknown> {
+  if (bcParams.user_agent_mode !== 'random') return bcParams;
+  const { user_agent_mode: _dropped, ...rest } = bcParams;
+  log(
+    "web_crawl: dropped browser_config.user_agent_mode='random' — it defeats Crawl4AI's " +
+      'browser pool (new Chromium per call) and exhausts the container.',
+  );
+  return rest;
+}
+
 export async function web_crawl(params: Record<string, unknown>): Promise<ToolResult> {
-  // Default sensible browser config (enable_stealth + residential proxy) when
-  // the caller didn't set their own. Keeps web_crawl symmetric with web_fetch.
+  // Default sensible browser config when the caller didn't set their own.
+  // Keeps web_crawl symmetric with web_fetch. No proxy_config: Crawl4AI >= 0.9
+  // rejects it outright (see config.ts).
   const bc = (params.browser_config as { params?: Record<string, unknown> } | undefined) ?? {};
-  const bcParams = bc.params ?? {};
-  const needProxy = Config.proxy && !bcParams.proxy_config;
-  const needStealth = bcParams.enable_stealth === undefined;
-  if (needProxy || needStealth) {
-    params = {
-      ...params,
-      browser_config: {
-        type: 'BrowserConfig',
-        params: {
-          headless: true,
-          enable_stealth: true,
-          ...bcParams,
-          ...(needProxy
-            ? {
-                proxy_config: {
-                  type: 'ProxyConfig',
-                  params: {
-                    server: Config.proxy!.server,
-                    username: Config.proxy!.username,
-                    password: Config.proxy!.password,
-                  },
-                },
-              }
-            : {}),
-        },
+  const bcParams = stripPoolHostileFields(bc.params ?? {});
+  params = {
+    ...params,
+    browser_config: {
+      type: 'BrowserConfig',
+      params: {
+        headless: true,
+        enable_stealth: true,
+        ...bcParams,
       },
-    };
-  }
+    },
+  };
   return proxyCrawl4AI('crawl', () => callCrawlTool(params)).then((r) =>
     trace('web_crawl', r),
   );

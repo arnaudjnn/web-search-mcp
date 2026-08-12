@@ -52,7 +52,20 @@ outgoing:
       # one stays burned for the whole session.
       - ${PROXY_URL}
 
+# Engine roster. Measured 2026-08-12 against this deployment — an engine that
+# cannot answer is not free: `outgoing.request_timeout` is 15s, and a single
+# engine that hangs for the full 15s sets the floor for the WHOLE response
+# (SearXNG waits for its slowest engine). duckduckgo did exactly that on every
+# query, pushing every response to ~15.13s and starving the client. Dropping it
+# took the same queries to 0.7–1.5s.
+#
+# Keep this list to engines that actually return. Re-enable one only after
+# re-measuring, and check what it does to p99 latency, not just whether it works.
 engines:
+  # google fails fast (~0.5s, CAPTCHA) rather than hanging, so it costs almost
+  # nothing to leave armed and it recovers on its own when the proxy pool
+  # rotates onto clean exits. It was returning 0 results at last measurement —
+  # see google_sorry_fix.py and the outgoing.proxies note above.
   - name: google
     engine: google
     shortcut: g
@@ -65,20 +78,9 @@ engines:
     use_mobile_ui: false
     disabled: false
 
-  - name: duckduckgo
-    engine: duckduckgo
-    shortcut: d
-    use_mobile_ui: false
-    disabled: false
-
   - name: bing
     engine: bing
     shortcut: bi
-    disabled: false
-
-  - name: qwant
-    engine: qwant
-    shortcut: qw
     disabled: false
 
   - name: mojeek
@@ -91,3 +93,31 @@ engines:
     shortcut: w
     use_mobile_ui: false
     disabled: false
+
+  # ── Disabled: measured dead, and each one taxes every query ──────────
+  # Always timed out (the full 15s), which alone set the response floor at
+  # ~15.13s and made every web_search call abort client-side.
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: d
+    use_mobile_ui: false
+    disabled: true
+
+  # "access denied" on every query.
+  - name: qwant
+    engine: qwant
+    shortcut: qw
+    disabled: true
+
+  # CAPTCHA on every query (startpage redirects to /sp/captcha). Present in
+  # SearXNG's defaults, so it needs an explicit disable to stay out.
+  - name: startpage
+    engine: startpage
+    shortcut: sp
+    disabled: true
+
+  # "access denied" on every query. Also from the defaults.
+  - name: wikidata
+    engine: wikidata
+    shortcut: wd
+    disabled: true

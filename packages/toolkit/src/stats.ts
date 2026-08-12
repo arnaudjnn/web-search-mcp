@@ -4,12 +4,13 @@
 // we have a real need.
 //
 // `approxProxyBytes` tracks the size of the payload we return to the
-// caller (markdown / html / json). For Crawl4AI-backed tools this
-// closely tracks the rendered HTML that flowed through the upstream
-// residential proxy, which is what iProyal bills for. SearXNG and
-// Wayback hits aren't proxied so they don't accrue here.
-
-import { getRotationStats } from './rotation.js';
+// caller (markdown / html / json).
+//
+// NOTE: Crawl4AI-backed tools no longer egress through a residential proxy —
+// Crawl4AI >= 0.9 refuses proxy_config from a request body, so these calls go
+// out on the platform's own IP and cost no proxy bandwidth. The cost estimate
+// below is therefore an upper bound kept for continuity; the metered proxy now
+// sits in the Scrapling service. See config.ts.
 
 export type ToolName =
   | 'web_search'
@@ -105,6 +106,5 @@ export function getStats() {
         { calls: counts[t], bytes: bytes[t], errors: errors[t] },
       ]),
     ),
-    rotation: getRotationStats(),
   };
 }
