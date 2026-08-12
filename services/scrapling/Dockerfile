@@ -43,7 +43,15 @@ COPY app.py .
 # its own single-slot executor, so a second worker only helped when two requests
 # of the SAME mode overlapped. Scale with replicas instead — a replica is a fresh
 # container with its own budget, which is what the Camoufox service does.
-ENV PORT=8000 WORKERS=1
+# No PORT default on purpose. The bind and the URL that reaches it have to come
+# from ONE source of truth, and that source is the Railway variable.
+#
+# With `ENV PORT=8000` here, the two sides fell back differently: the container
+# still bound 8000 from this default while `${{Scrapling.PORT}}` — which can only
+# see a Railway variable — resolved to an empty string, so a consumer silently got
+# `http://scrapling.railway.internal:` and every fetch failed far from the cause.
+# Without a default, a missing variable stops the container instead.
+ENV WORKERS=1
 EXPOSE 8000
 # Bind to 0.0.0.0. Railway's edge router talks IPv4 to the container
 # (so an IPv6-only bind returns 502), and Railway's private DNS for
@@ -54,4 +62,4 @@ EXPOSE 8000
 # one StealthySession lazily on first request. Patchright's sync API
 # can't coexist with FastAPI's asyncio loop in the same process, so
 # parallelism is achieved across processes rather than within.
-CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT} --workers ${WORKERS}"]
+CMD ["sh", "-c", ": \"${PORT:?PORT must be set — this image has no default, so a missing Railway variable fails here instead of silently handing callers a portless URL}\" && exec uvicorn app:app --host 0.0.0.0 --port ${PORT} --workers ${WORKERS}"]

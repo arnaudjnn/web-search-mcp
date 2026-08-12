@@ -27,7 +27,10 @@ COPY app.py .
 # session + its sensor cookie can't be shared across processes, and a
 # second Camoufox in one container thrashes Railway CPU. Scale by replicas
 # if ever needed (each warms its own session).
-ENV PORT=8000 WORKERS=1
+# No PORT default on purpose — see the note in services/scrapling/Dockerfile. The
+# Railway variable is the single source of truth for both the bind and the URL
+# that reaches it, so a missing one must fail loudly rather than diverge.
+ENV WORKERS=1
 EXPOSE 8000
 # Bind 0.0.0.0 (Railway's edge talks IPv4; an IPv6-only bind 502s).
-CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT} --workers ${WORKERS}"]
+CMD ["sh", "-c", ": \"${PORT:?PORT must be set — this image has no default, so a missing Railway variable fails here instead of silently handing callers a portless URL}\" && exec uvicorn app:app --host 0.0.0.0 --port ${PORT} --workers ${WORKERS}"]
