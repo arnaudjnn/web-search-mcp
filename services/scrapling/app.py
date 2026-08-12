@@ -96,12 +96,29 @@ class Mode(str, Enum):
 # challenged, so an unlisted host never pays the solve tax up front.
 STEALTH_HOSTS = ("linkedin.com",)
 
+# Hosts that must start at SOLVE because escalation can never rescue them: they
+# answer FAST with HTTP 200, so nothing looks challenged, but the body is an
+# un-hydrated shell. Trustpilot is the case in hand — from a datacenter IP it
+# returns a ~965KB page whose review data sits only in embedded JSON, with no
+# rendered /users/ anchors, so the markdown comes out with zero reviews and the
+# caller concludes the company has none. SOLVE loads subresources and yields the
+# rendered page with all 24 anchors.
+#
+# The cost is real (SOLVE is ~2x FAST) — only list a host after confirming FAST
+# returns a 200 that is *wrong*, which is the one thing escalation cannot detect.
+SOLVE_HOSTS = ("trustpilot.com",)
+
+
+def _host_matches(host: str, suffixes: tuple[str, ...]) -> bool:
+    return any(host == s or host.endswith("." + s) for s in suffixes)
+
 
 def pick_mode(url: str) -> Mode:
     host = (urlsplit(url).hostname or "").lower()
-    for suffix in STEALTH_HOSTS:
-        if host == suffix or host.endswith("." + suffix):
-            return Mode.STEALTH
+    if _host_matches(host, STEALTH_HOSTS):
+        return Mode.STEALTH
+    if _host_matches(host, SOLVE_HOSTS):
+        return Mode.SOLVE
     return Mode.FAST
 
 
