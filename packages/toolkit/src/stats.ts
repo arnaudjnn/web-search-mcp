@@ -15,6 +15,7 @@
 export type ToolName =
   | 'web_search'
   | 'web_fetch'
+  | 'web_html'
   | 'web_crawl'
   | 'web_screenshot'
   | 'web_pdf'
@@ -27,6 +28,7 @@ const startedAt = new Date().toISOString();
 const counts: Record<ToolName, number> = {
   web_search: 0,
   web_fetch: 0,
+  web_html: 0,
   web_crawl: 0,
   web_screenshot: 0,
   web_pdf: 0,
@@ -39,6 +41,7 @@ const counts: Record<ToolName, number> = {
 const bytes: Record<ToolName, number> = {
   web_search: 0,
   web_fetch: 0,
+  web_html: 0,
   web_crawl: 0,
   web_screenshot: 0,
   web_pdf: 0,
@@ -50,6 +53,7 @@ const bytes: Record<ToolName, number> = {
 const errors: Record<ToolName, number> = {
   web_search: 0,
   web_fetch: 0,
+  web_html: 0,
   web_crawl: 0,
   web_screenshot: 0,
   web_pdf: 0,
@@ -62,6 +66,7 @@ const errors: Record<ToolName, number> = {
 // Wayback are direct HTTP, not residential-proxied.
 const PROXY_BACKED: ToolName[] = [
   'web_fetch',
+  'web_html',
   'web_crawl',
   'web_screenshot',
   'web_pdf',

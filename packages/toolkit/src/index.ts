@@ -1,6 +1,7 @@
 export {
   WebSearchInput,
   WebFetchInput,
+  WebHtmlInput,
   WebScreenshotInput,
   WebPdfInput,
   WebExecuteJsInput,
@@ -15,6 +16,7 @@ export { tools, toolsByName } from './tools.js';
 export {
   web_search,
   web_fetch,
+  web_html,
   web_screenshot,
   web_pdf,
   web_execute_js,
@@ -27,6 +29,8 @@ export {
 
 export { Config } from './config.js';
 export { getStats, recordCall } from './stats.js';
+export { scraplingFetch, ScraplingError } from './scrapling.js';
+export type { ScraplingMode, ScraplingResult } from './scrapling.js';
 
 export type {
   SearchResult,

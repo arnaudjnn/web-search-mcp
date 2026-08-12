@@ -5,6 +5,7 @@ import {
   callPdfTool,
   callScreenshotTool,
 } from './crawl4ai.js';
+import { scraplingFetch, type ScraplingMode } from './scrapling.js';
 import { searchSearXNG } from './searxng.js';
 import { getStats, recordCall, type ToolName } from './stats.js';
 import { getArchivedPage, getSnapshots } from './wayback.js';
@@ -106,10 +107,86 @@ export async function web_search(params: {
   return results.data;
 }
 
+/** Pull markdown for the requested filter out of a Crawl4AI `crawl` result. */
+function markdownFromCrawlResult(
+  resp: ToolResult,
+  filter: string,
+): { md: string; success: boolean } | null {
+  const text = resp?.content?.[0]?.text;
+  if (!text) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const r = (parsed as { results?: Array<Record<string, unknown>> })?.results?.[0];
+  if (!r) return null;
+
+  const m = r.markdown as string | { raw_markdown?: string; fit_markdown?: string } | undefined;
+  let md = '';
+  if (typeof m === 'string') {
+    md = m;
+  } else if (m && typeof m === 'object') {
+    md =
+      (filter === 'raw' ? m.raw_markdown : m.fit_markdown) ||
+      m.raw_markdown ||
+      m.fit_markdown ||
+      '';
+  }
+  if (!md) return null;
+  return { md, success: r.success !== false };
+}
+
+/**
+ * Render already-fetched HTML to markdown using Crawl4AI's own markdown
+ * pipeline, via its `raw://` input scheme. This is what lets the fetch move to
+ * Scrapling without changing web_fetch's output contract: the `f` filter
+ * (raw/fit/bm25/llm) is implemented by Crawl4AI's markdown generator, so
+ * reimplementing HTML->markdown here would silently change every caller's
+ * output. Crawl4AI does no network I/O for a raw:// input.
+ */
+async function htmlToMarkdown(html: string, filter: string): Promise<string | null> {
+  const resp = (await callCrawlTool({
+    urls: [`raw://${html}`],
+    crawler_config: { type: 'CrawlerRunConfig', params: { wait_until: 'load' } },
+  })) as ToolResult;
+  return markdownFromCrawlResult(resp, filter)?.md ?? null;
+}
+
+/** Fetch a URL through Crawl4AI directly. The fallback when Scrapling is down. */
+async function crawl4aiFetch(url: string, filter: string, delay: number): Promise<ToolResult> {
+  return proxyCrawl4AI('crawl', async () => {
+    const resp = (await callCrawlTool({
+      urls: [url],
+      // Only fields Crawl4AI >= 0.9 accepts from a request body. No
+      // proxy_config / session_id (forbidden -> hard 400) and no
+      // user_agent_mode:'random' (see stripPoolHostileFields).
+      browser_config: {
+        type: 'BrowserConfig',
+        params: { headless: true, enable_stealth: true },
+      },
+      crawler_config: {
+        type: 'CrawlerRunConfig',
+        params: {
+          wait_until: 'load',
+          // Clamped to 60s server-side anyway, so ask honestly.
+          page_timeout: 60000,
+          delay_before_return_html: delay,
+        },
+      },
+    })) as ToolResult;
+
+    const extracted = markdownFromCrawlResult(resp, filter);
+    if (!extracted) return resp;
+    return {
+      content: [{ type: 'text', text: extracted.md }],
+      isError: !extracted.success,
+    };
+  });
+}
+
 export async function web_fetch(params: Record<string, unknown>): Promise<ToolResult> {
-  // The upstream Crawl4AI `md` MCP tool is unstable on this version
-  // (BrowserContext.new_page: Connection closed while reading from the driver).
-  // Route through the working `crawl` tool and extract markdown ourselves.
   const url = params.url as string | undefined;
   if (!url) {
     return {
@@ -118,62 +195,121 @@ export async function web_fetch(params: Record<string, unknown>): Promise<ToolRe
     };
   }
   const filter = ((params.f as string | undefined) ?? 'fit').toLowerCase();
-
-  // Only fields Crawl4AI >= 0.9 still accepts from a request body. The old
-  // recipe here (proxy_config + session_id + page_timeout 120000) is gone:
-  //  - proxy_config / session_id are UNTRUSTED_FORBIDDEN_FIELDS -> hard 400,
-  //    which is why 100% of web_fetch calls were failing.
-  //  - page_timeout is clamped to 60s server-side, so ask for 60s honestly.
-  // Do NOT add user_agent_mode:'random' — see stripPoolHostileFields().
-  const browserParams: Record<string, unknown> = { headless: true, enable_stealth: true };
-
-  // Seconds to settle before extracting HTML. The old default was 15s, chosen
-  // for a JS-challenge recipe that depended on the (now impossible) proxy and
-  // session reuse; without those it was 15s of dead latency on every fetch.
   const delay =
     typeof params.delay === 'number' && Number.isFinite(params.delay) ? params.delay : 2;
+  const mode = params.mode as ScraplingMode | undefined;
 
-  return proxyCrawl4AI('crawl', async () => {
-    const resp = (await callCrawlTool({
-      urls: [url],
-      browser_config: { type: 'BrowserConfig', params: browserParams },
-      crawler_config: {
-        type: 'CrawlerRunConfig',
-        params: {
-          wait_until: 'load',
-          page_timeout: 60000,
-          delay_before_return_html: delay,
-        },
-      },
-    })) as ToolResult;
+  // Scrapling does the fetching. It is the only path with residential egress
+  // and challenge solving, which Crawl4AI >= 0.9 cannot provide at all: on
+  // LinkedIn, Crawl4AI's datacenter IP decayed to 0/6 (HTTP 999) while
+  // Scrapling held 94%, and on Trustpilot Crawl4AI's success is luck-of-the-IP
+  // while Scrapling escalates into a real challenge solve.
+  let result: ToolResult;
+  try {
+    const page = await scraplingFetch({ url, mode, timeoutMs: 60_000 });
+    const md = page.html ? await htmlToMarkdown(page.html, filter) : null;
 
-    const text = resp?.content?.[0]?.text;
-    if (!text) return resp;
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      return resp;
+    if (md) {
+      // A block/challenge page converts to markdown perfectly well, so the
+      // HTTP status is the only honest signal here — not whether we got text.
+      // Keep the body either way: callers can often still use it, and it makes
+      // "which wall did we hit" diagnosable.
+      const blocked = page.status >= 400;
+      const provenance = `scrapling mode=${page.mode}${page.escalated ? ', escalated' : ''}`;
+      result = blocked
+        ? {
+            content: [
+              {
+                type: 'text',
+                text: `web_fetch: upstream returned HTTP ${page.status} (${provenance}). Body as markdown follows.\n\n${md}`,
+              },
+            ],
+            isError: true,
+          }
+        : { content: [{ type: 'text', text: md }], isError: false };
+    } else {
+      result = {
+        content: [
+          {
+            type: 'text',
+            text: `web_fetch: scrapling returned HTTP ${page.status} with no extractable content (${page.size} bytes, mode=${page.mode}).`,
+          },
+        ],
+        isError: true,
+      };
     }
-    const r = (parsed as { results?: Array<Record<string, unknown>> })?.results?.[0];
-    if (!r) return resp;
+  } catch (err) {
+    // Scrapling unreachable or erroring: fall back to Crawl4AI so a sidecar
+    // outage degrades quality rather than failing the tool outright.
+    log(
+      `web_fetch: scrapling unavailable, falling back to Crawl4AI:`,
+      err instanceof Error ? err.message : String(err),
+    );
+    result = await crawl4aiFetch(url, filter, delay);
+  }
 
-    let md = '';
-    const m = r.markdown as string | { raw_markdown?: string; fit_markdown?: string } | undefined;
-    if (typeof m === 'string') {
-      md = m;
-    } else if (m && typeof m === 'object') {
-      md =
-        (filter === 'raw' ? m.raw_markdown : m.fit_markdown) || m.raw_markdown || m.fit_markdown || '';
-    }
-    if (!md) return resp;
+  return trace('web_fetch', result);
+}
 
+/**
+ * Raw HTML, deliberately not markdown.
+ *
+ * web_fetch's markdown conversion destroys exactly the things structured
+ * scrapers need: <script type="application/ld+json"> blocks, meta tags and
+ * attributes. gtm-tools' LinkedIn enrichment parses the JSON-LD `Person` out of
+ * the page, so it needs the document as served. Returns a JSON envelope so
+ * callers can distinguish "fetched, but the origin said 999" from "fetched
+ * fine" without guessing from the body.
+ */
+export async function web_html(params: Record<string, unknown>): Promise<ToolResult> {
+  const url = params.url as string | undefined;
+  if (!url) {
     return {
-      content: [{ type: 'text', text: md }],
-      isError: !r.success,
+      content: [{ type: 'text', text: 'web_html error: missing required `url`' }],
+      isError: true,
     };
-  }).then((r) => trace('web_fetch', r));
+  }
+  const mode = params.mode as ScraplingMode | undefined;
+  const timeoutMs =
+    typeof params.timeout_ms === 'number' && Number.isFinite(params.timeout_ms)
+      ? params.timeout_ms
+      : 60_000;
+
+  try {
+    const page = await scraplingFetch({
+      url,
+      mode,
+      timeoutMs,
+      networkIdle: params.network_idle === true,
+    });
+    const result: ToolResult = {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            status: page.status,
+            url: page.url,
+            mode: page.mode,
+            escalated: page.escalated,
+            size: page.size,
+            html: page.html,
+          }),
+        },
+      ],
+      // A non-2xx is reported in `status` rather than as a tool error: callers
+      // like the LinkedIn path branch on 999 vs 404 themselves, and losing the
+      // body would take that decision away from them.
+      isError: false,
+    };
+    return trace('web_html', result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log('web_html failed:', msg);
+    return trace('web_html', {
+      content: [{ type: 'text', text: `web_html error: ${msg}` }],
+      isError: true,
+    });
+  }
 }
 
 export async function web_screenshot(params: Record<string, unknown>): Promise<ToolResult> {
@@ -282,6 +418,7 @@ export async function web_usage_stats(_params: Record<string, unknown>) {
 export const functionMap: Record<string, (params: any) => Promise<any>> = {
   web_search,
   web_fetch,
+  web_html,
   web_screenshot,
   web_pdf,
   web_execute_js,

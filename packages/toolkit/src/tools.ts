@@ -1,6 +1,7 @@
 import {
   WebSearchInput,
   WebFetchInput,
+  WebHtmlInput,
   WebScreenshotInput,
   WebPdfInput,
   WebExecuteJsInput,
@@ -25,8 +26,24 @@ export const tools: ToolDefinition[] = [
   },
   {
     name: 'web_fetch',
-    description: 'Fetch a URL and return its content as clean markdown via Crawl4AI',
+    description:
+      'Fetch a URL and return its content as clean markdown. Fetched via Scrapling ' +
+      '(residential egress + JS-challenge solving) and rendered to markdown by Crawl4AI.',
     parameters: WebFetchInput,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  {
+    name: 'web_html',
+    description:
+      'Fetch a URL and return the raw HTML as served, plus the upstream status. Use this ' +
+      'instead of web_fetch when you need structured markup that markdown conversion ' +
+      'destroys — JSON-LD, meta tags, attributes.',
+    parameters: WebHtmlInput,
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,

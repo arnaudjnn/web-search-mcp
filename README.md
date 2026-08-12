@@ -1,6 +1,6 @@
 # Web Tools
 
-A self-hosted web toolkit providing eight tools for search, content extraction, and archival. Available as an [MCP](https://modelcontextprotocol.io/) server, REST API, and CLI — powered by [SearXNG](https://github.com/searxng/searxng), [Crawl4AI](https://github.com/unclecode/crawl4ai), and the [Wayback Machine](https://web.archive.org/).
+A self-hosted web toolkit providing nine tools for search, content extraction, and archival. Available as an [MCP](https://modelcontextprotocol.io/) server, REST API, and CLI — powered by [SearXNG](https://github.com/searxng/searxng), [Crawl4AI](https://github.com/unclecode/crawl4ai), [Scrapling](https://github.com/D4Vinci/Scrapling), and the [Wayback Machine](https://web.archive.org/).
 
 ## Architecture
 
@@ -12,9 +12,37 @@ graph LR
     Server --> Toolkit
     Toolkit --> SearXNG
     SearXNG --> Redis
+    Toolkit --> Scrapling
     Toolkit --> Crawl4AI
     Toolkit --> Wayback["Wayback Machine"]
 ```
+
+### Why two fetchers
+
+They are not redundant — each reaches pages the other cannot, and the split is
+measured, not aesthetic:
+
+| | Crawl4AI | Scrapling |
+| --- | --- | --- |
+| Egress | this host's IP only¹ | rotating residential, or direct |
+| JS challenges | no | yes (`solve`) |
+| LinkedIn profiles | decays to 0/6, HTTP 999 | 94% (34/36) |
+| Trustpilot reviews | luck-of-the-IP | 2/2 via challenge solve |
+| Ordinary pages | ~2-5s | ~0.7-1.9s (`fast`) |
+| Screenshot / PDF / JS exec | yes | no |
+
+¹ Crawl4AI >= 0.9 treats every HTTP request body as `Provenance.UNTRUSTED` and
+lists `proxy_config` in `UNTRUSTED_FORBIDDEN_FIELDS`, so passing a proxy is a
+hard 400. It also pins Chromium to its own localhost egress proxy, so a
+server-side proxy is overwritten. There is no supported way to give Crawl4AI a
+proxy, which is why residential egress lives in Scrapling.
+
+So: **Scrapling fetches, Crawl4AI renders and does the browser work.**
+`web_fetch` and `web_html` fetch through Scrapling; `web_fetch` then renders
+that HTML to markdown through Crawl4AI's markdown pipeline (via its `raw://`
+input) so the `f` filter keeps working. `web_crawl`, `web_execute_js`,
+`web_screenshot` and `web_pdf` stay on Crawl4AI. If Scrapling is unreachable,
+`web_fetch` falls back to fetching through Crawl4AI directly.
 
 The project is structured as a **monorepo** with three packages:
 
@@ -22,11 +50,11 @@ The project is structured as a **monorepo** with three packages:
 - **`packages/api`** — Express HTTP server exposing MCP (`POST /mcp`) and REST (`POST /api/v0/{tool_name}`) endpoints.
 - **`packages/cli`** — Commander.js CLI for terminal usage.
 
-The full stack deploys as **4 services**: Redis, SearXNG, Crawl4AI, and the Web Tools server.
+The full stack deploys as **5 services**: Redis, SearXNG, Crawl4AI, Scrapling, and the Web Tools server.
 
 ## Tools
 
-The server exposes eight tools:
+The server exposes nine tools:
 
 ### `web_search`
 
@@ -42,15 +70,48 @@ Returns a JSON array of `{ url, title, description }` results.
 
 ### `web_fetch`
 
-Fetch a single URL and return its content as clean markdown via Crawl4AI.
+Fetch a single URL and return its content as clean markdown. Fetched via
+Scrapling, rendered to markdown by Crawl4AI.
 
 | Parameter | Type              | Description                                                              |
 | --------- | ----------------- | ------------------------------------------------------------------------ |
 | `url`     | string (required) | URL to fetch                                                             |
 | `f`       | enum (optional)   | Content-filter strategy: `raw`, `fit`, `bm25`, or `llm` (default: `fit`) |
 | `q`       | string (optional) | Query string for BM25/LLM filters                                        |
+| `mode`    | enum (optional)   | `fast`, `stealth`, or `solve` — see below (default: routed by host)      |
+| `delay`   | number (optional) | Seconds to settle before extraction (default: 2)                         |
 
 Returns the page content as markdown.
+
+**Fetch modes.** Omit `mode` and the sidecar picks one by host, then
+auto-escalates to `solve` if the response looks like a challenge page:
+
+| Mode | Egress | Use for |
+| --- | --- | --- |
+| `fast` | direct, no challenge solving | most pages; the default |
+| `stealth` | rotating residential proxy | IP-reputation walls (LinkedIn's HTTP 999) |
+| `solve` | direct, solves the JS challenge | Cloudflare-style "Verifying Connection" walls |
+
+`fast` is the default rather than `solve` because challenge solving roughly
+doubles latency on ordinary pages and, on a challenge it cannot solve, blocks
+for the whole timeout instead of failing fast.
+
+### `web_html`
+
+Fetch a URL and return the raw HTML as served, plus the upstream status. Use
+this rather than `web_fetch` when you need markup that markdown conversion
+destroys — JSON-LD, meta tags, attributes.
+
+| Parameter      | Type              | Description                                             |
+| -------------- | ----------------- | ------------------------------------------------------- |
+| `url`          | string (required) | URL to fetch                                            |
+| `mode`         | enum (optional)   | `fast`, `stealth`, or `solve` (default: routed by host)  |
+| `network_idle` | boolean (optional)| Wait for the network to go quiet (default: false)        |
+| `timeout_ms`   | number (optional) | Upstream fetch timeout (default: 60000)                 |
+
+Returns a JSON object: `{ status, url, mode, escalated, size, html }`. A
+non-2xx upstream status is reported in `status` rather than raised as an error,
+so callers can branch on 999 vs 404 themselves.
 
 ### `web_screenshot`
 
@@ -304,8 +365,9 @@ docker compose up
 | `SEARXNG_URL` | No | SearXNG URL (default: `http://searxng.railway.internal:8080`) |
 | `CRAWL4AI_URL` | No | Crawl4AI URL (default: `http://crawl4ai.railway.internal:11235`) |
 | `CRAWL4AI_API_TOKEN` | No | API token for Crawl4AI authentication |
-| `SEARXNG_ENGINES` | No | Default engines (e.g. `"google,brave,duckduckgo"`) |
-| `PROXY_URL` | No | Proxy for SearXNG outgoing requests (set on SearXNG service) |
+| `SCRAPLING_URL` | No | Scrapling URL (default: `http://scrapling.railway.internal:8000`) |
+| `SEARXNG_ENGINES` | No | Default engines (e.g. `"brave,bing"`) |
+| `PROXY_URL` | No | Rotating residential proxy. Set on the **SearXNG** and **Scrapling** services, not the server. Required for `mode=stealth`. |
 
 ## Authentication
 

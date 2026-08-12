@@ -27,6 +27,15 @@ export const WebFetchInput = z.object({
   provider: z.string().optional().describe('LLM provider for LLM filter (e.g. "openai/gpt-4")'),
   temperature: z.number().optional().describe('Temperature for LLM filter'),
   base_url: z.string().optional().describe('Base URL override for the LLM provider'),
+  mode: z
+    .enum(['fast', 'stealth', 'solve'])
+    .optional()
+    .describe(
+      'Fetch strategy. fast = direct (default for most hosts). stealth = residential ' +
+        'proxy, for IP-reputation walls such as LinkedIn (HTTP 999). solve = solve the ' +
+        'JS challenge, for Cloudflare-style "Verifying Connection" walls. Omit to route ' +
+        'by host and auto-escalate to solve when a challenge is detected.',
+    ),
   // No session_id: Crawl4AI >= 0.9 lists session_id among the fields an
   // untrusted request body may not set, so passing it is a hard 400.
   delay: z
@@ -35,6 +44,29 @@ export const WebFetchInput = z.object({
     .describe(
       'Seconds to settle before extracting HTML (delay_before_return_html, default 2). Raise for pages that hydrate slowly.',
     ),
+});
+
+export const WebHtmlInput = z.object({
+  url: z.string().url().describe('URL to fetch'),
+  mode: z
+    .enum(['fast', 'stealth', 'solve'])
+    .optional()
+    .describe(
+      'Fetch strategy. fast = direct (default for most hosts). stealth = residential ' +
+        'proxy, for IP-reputation walls such as LinkedIn (HTTP 999). solve = solve the ' +
+        'JS challenge, for Cloudflare-style walls. Omit to route by host and ' +
+        'auto-escalate to solve when a challenge is detected.',
+    ),
+  network_idle: z
+    .boolean()
+    .optional()
+    .describe('Wait for the network to go quiet before returning (default: false)'),
+  timeout_ms: z
+    .number()
+    .min(1000)
+    .max(180000)
+    .optional()
+    .describe('Upstream fetch timeout in milliseconds (default: 60000)'),
 });
 
 export const WebScreenshotInput = z.object({

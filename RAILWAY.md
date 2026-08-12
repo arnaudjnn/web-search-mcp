@@ -1,10 +1,10 @@
 # Deploy and Host Web Tools on Railway
 
-Web Tools is an open-source web toolkit that gives AI agents eight tools to search, fetch, screenshot, crawl, and archive the web. Available as an [MCP](https://modelcontextprotocol.io/) server, REST API, and CLI. It consumes zero LLM tokens for web access, so your models spend their budget on reasoning, not searching. The web has always been free for humans, so why should AI agents have to pay per query?
+Web Tools is an open-source web toolkit that gives AI agents nine tools to search, fetch, screenshot, crawl, and archive the web. Available as an [MCP](https://modelcontextprotocol.io/) server, REST API, and CLI. It consumes zero LLM tokens for web access, so your models spend their budget on reasoning, not searching. The web has always been free for humans, so why should AI agents have to pay per query?
 
 ## About Hosting Web Tools
 
-This template deploys a complete self-hosted web toolkit as four services on Railway: **Redis**, **SearXNG** (privacy-respecting metasearch engine), **Crawl4AI** (headless browser for content extraction, screenshots, PDFs, and JS execution), and the **Web Tools Server** that ties them together. An API key is auto-generated at deploy time to secure your endpoint. Once deployed, any MCP-compatible client (Claude Code, Claude Desktop, Cursor, Windsurf, etc.) can connect over HTTP and use all eight tools. A REST API (`POST /api/v0/{tool_name}`) is also available for non-MCP integrations. No per-query fees, no third-party API keys, no usage limits. You own the infrastructure and the data never leaves your stack.
+This template deploys a complete self-hosted web toolkit as five services on Railway: **Redis**, **SearXNG** (privacy-respecting metasearch engine), **Crawl4AI** (headless browser for content extraction, screenshots, PDFs, and JS execution), **Scrapling** (stealth fetching — residential egress and JS-challenge solving), and the **Web Tools Server** that ties them together. An API key is auto-generated at deploy time to secure your endpoint. Once deployed, any MCP-compatible client (Claude Code, Claude Desktop, Cursor, Windsurf, etc.) can connect over HTTP and use all nine tools. A REST API (`POST /api/v0/{tool_name}`) is also available for non-MCP integrations. No per-query fees, no third-party API keys, no usage limits. You own the infrastructure and the data never leaves your stack.
 
 ## Common Use Cases
 
@@ -17,7 +17,8 @@ This template deploys a complete self-hosted web toolkit as four services on Rai
 
 - **Redis** (7-alpine): In-memory cache used by SearXNG for rate limiting and result caching
 - **SearXNG**: Privacy-respecting metasearch engine that aggregates results from Google, Brave, DuckDuckGo, and more. Builds from `services/searxng/Dockerfile` with optional `PROXY_URL` support for outgoing requests
-- **Crawl4AI**: Headless browser service for page fetching, content extraction, screenshots, PDFs, and JavaScript execution
+- **Crawl4AI**: Headless browser service for crawling, screenshots, PDFs and JavaScript execution, and for rendering HTML to markdown. Note Crawl4AI >= 0.9 refuses `proxy_config` from a request body, so it always egresses on its own IP — pin the image rather than tracking `:latest`
+- **Scrapling**: Stealth fetch sidecar that serves `web_fetch` and `web_html`. Owns the rotating residential egress (for IP-reputation walls such as LinkedIn) and the JS-challenge solving (for Cloudflare-style walls) that Crawl4AI structurally cannot do. Builds from `services/scrapling/Dockerfile`; set `PROXY_URL` on it to enable `mode=stealth`
 - **Web Tools Server** (Node.js 22): The HTTP server exposing MCP and REST API endpoints. Builds from `packages/api/Dockerfile`
 
 ### Deployment Dependencies

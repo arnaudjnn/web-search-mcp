@@ -7,6 +7,7 @@ const envSchema = z.object({
   API_KEY: z.string().min(1, 'API_KEY is required'),
   CRAWL4AI_URL: z.string().default('http://crawl4ai.railway.internal:11235'),
   CRAWL4AI_API_TOKEN: z.string().optional(),
+  SCRAPLING_URL: z.string().default('http://scrapling.railway.internal:8000'),
 });
 // No PROXY_* here on purpose. Crawl4AI >= 0.9 refuses `proxy_config` (and
 // `extra_args`, `session_id`, `magic`, …) from any request body: every HTTP
@@ -28,6 +29,10 @@ export const Config = {
   crawl4ai: {
     url: env.CRAWL4AI_URL,
     apiToken: env.CRAWL4AI_API_TOKEN,
+  },
+  // Owns residential egress + JS-challenge solving. See services/scrapling.
+  scrapling: {
+    url: env.SCRAPLING_URL,
   },
   // One request, not three. The three parallel attempts were identical
   // queries hitting the same upstream engines through the same SearXNG, so
