@@ -6,6 +6,15 @@ import {
   callScreenshotTool,
   renderMarkdown,
 } from './crawl4ai.js';
+import {
+  camoufoxBytes,
+  camoufoxEval,
+  camoufoxRecycle,
+  camoufoxRender,
+  camoufoxScreenshot,
+  camoufoxSpaFetch,
+} from './camoufox.js';
+import { isItalianSource } from './routing.js';
 import { scraplingFetch } from './scrapling.js';
 import { searchSearXNG } from './searxng.js';
 import { getStats, recordCall, type ToolName } from './stats.js';
@@ -223,16 +232,23 @@ export async function web_fetch(params: Record<string, unknown>): Promise<ToolRe
   const delay =
     typeof params.delay === 'number' && Number.isFinite(params.delay) ? params.delay : 2;
 
-  // Scrapling does the fetching. It is the only path with residential egress
-  // and challenge solving, which Crawl4AI >= 0.9 cannot provide at all: on
-  // LinkedIn, Crawl4AI's datacenter IP decayed to 0/6 (HTTP 999) while
-  // Scrapling held 94%, and on Trustpilot Crawl4AI's success is luck-of-the-IP
-  // while Scrapling escalates into a real challenge solve.
+  // Which backend fetches this is decided from the host (see routing.ts), never
+  // asked of the caller. Italian sources need an Italian residential visitor —
+  // a US exit is the wrong country, not a milder version of the right one.
   let result: ToolResult;
   try {
-    // No mode passed: the sidecar routes by host and escalates to a challenge
-    // solve only on evidence. Engine choice is deliberately not a tool input.
-    const page = await scraplingFetch({ url, timeoutMs: 60_000 });
+    const page = isItalianSource(url)
+      ? await camoufoxRender({ url, timeoutMs: 60_000 }).then((r) => ({
+          status: r.status,
+          url: r.url,
+          html: r.html,
+          size: r.html.length,
+          mode: 'camoufox' as const,
+          escalated: false,
+        }))
+      : // No mode passed: the sidecar routes by host and escalates to a
+        // challenge solve only on evidence.
+        await scraplingFetch({ url, timeoutMs: 60_000 });
     // Pass the URL we actually landed on (after redirects) so relative links
     // resolve against the right origin.
     const md = page.html
@@ -278,7 +294,7 @@ export async function web_fetch(params: Record<string, unknown>): Promise<ToolRe
     // Scrapling unreachable or erroring: fall back to Crawl4AI so a sidecar
     // outage degrades quality rather than failing the tool outright.
     log(
-      `web_fetch: scrapling unavailable, falling back to Crawl4AI:`,
+      `web_fetch: stealth fetcher unavailable, falling back to Crawl4AI:`,
       err instanceof Error ? err.message : String(err),
     );
     result = await crawl4aiFetch(url, filter, delay);
@@ -311,11 +327,20 @@ export async function web_html(params: Record<string, unknown>): Promise<ToolRes
       : 60_000;
 
   try {
-    const page = await scraplingFetch({
-      url,
-      timeoutMs,
-      networkIdle: params.network_idle === true,
-    });
+    const page = isItalianSource(url)
+      ? await camoufoxRender({ url, timeoutMs }).then((r) => ({
+          status: r.status,
+          url: r.url,
+          html: r.html,
+          size: r.html.length,
+          mode: 'camoufox' as const,
+          escalated: false,
+        }))
+      : await scraplingFetch({
+          url,
+          timeoutMs,
+          networkIdle: params.network_idle === true,
+        });
     const result: ToolResult = {
       content: [
         {
@@ -341,7 +366,7 @@ export async function web_html(params: Record<string, unknown>): Promise<ToolRes
     // deployed from the template before it existed) still gets HTML, just
     // without residential egress or challenge solving.
     log(
-      'web_html: scrapling unavailable, falling back to Crawl4AI:',
+      'web_html: stealth fetcher unavailable, falling back to Crawl4AI:',
       err instanceof Error ? err.message : String(err),
     );
     return trace('web_html', await crawl4aiHtml(url));
@@ -397,6 +422,33 @@ async function crawl4aiHtml(url: string): Promise<ToolResult> {
 }
 
 export async function web_screenshot(params: Record<string, unknown>): Promise<ToolResult> {
+  const url = params.url as string | undefined;
+
+  // Same host routing as web_fetch: capturing what an Italian residential
+  // visitor sees is the whole point for these sources, and Crawl4AI would
+  // screenshot a bot wall from this host's datacenter IP instead.
+  if (url && isItalianSource(url)) {
+    try {
+      const r = await camoufoxScreenshot({
+        url,
+        fullPage: params.full_page !== false,
+        waitMs:
+          typeof params.screenshot_wait_for === 'number'
+            ? params.screenshot_wait_for * 1000
+            : undefined,
+      });
+      return trace('web_screenshot', {
+        content: [{ type: 'text', text: r.b64 }],
+        isError: r.status >= 400,
+      });
+    } catch (err) {
+      log(
+        'web_screenshot: camoufox unavailable, falling back to Crawl4AI:',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
   return proxyCrawl4AI('screenshot', () => callScreenshotTool(params)).then((r) =>
     trace('web_screenshot', r),
   );
@@ -497,6 +549,146 @@ export async function web_usage_stats(_params: Record<string, unknown>) {
   return getStats();
 }
 
+// ── Camoufox-backed tools ────────────────────────────────────────────
+// These expose what the Italian residential Firefox can do and the other two
+// backends cannot. They are separate tools rather than flags on the existing
+// ones because the capability differs, not just the egress: a binary download
+// and a warmed-session POST are not "web_fetch with an option".
+
+/**
+ * Download a URL's raw bytes through the residential exit, base64-encoded.
+ *
+ * Everything else here returns text. PDFs behind a residential/bot-gated origin
+ * need the bytes as served — re-rendering them as markdown loses the document.
+ */
+export async function web_bytes(params: Record<string, unknown>): Promise<ToolResult> {
+  const url = params.url as string | undefined;
+  if (!url) {
+    return { content: [{ type: 'text', text: 'web_bytes error: missing required `url`' }], isError: true };
+  }
+  try {
+    const r = await camoufoxBytes({
+      url,
+      timeoutMs: typeof params.timeout_ms === 'number' ? params.timeout_ms : undefined,
+    });
+    return trace('web_bytes', {
+      content: [{ type: 'text', text: JSON.stringify({ status: r.status, url, size_b64: r.b64.length, b64: r.b64 }) }],
+      // A non-2xx is reported in `status`, not raised — a caller fetching a PDF
+      // that 404s wants to know that, not to lose the response.
+      isError: false,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log('web_bytes failed:', msg);
+    return trace('web_bytes', { content: [{ type: 'text', text: `web_bytes error: ${msg}` }], isError: true });
+  }
+}
+
+/**
+ * Evaluate JS in a residential page and return its JSON result.
+ *
+ * web_execute_js already runs scripts, but through Crawl4AI on this host's
+ * datacenter IP — useless for a site that bot-gates that IP. This is the same
+ * idea from an Italian residential Firefox, for driving/inspecting JS SPAs
+ * (open a facet dropdown, read the codes behind it).
+ */
+export async function web_eval(params: Record<string, unknown>): Promise<ToolResult> {
+  const url = params.url as string | undefined;
+  const js = params.js as string | undefined;
+  if (!url || !js) {
+    return {
+      content: [{ type: 'text', text: 'web_eval error: `url` and `js` are both required' }],
+      isError: true,
+    };
+  }
+  try {
+    const r = await camoufoxEval({
+      url,
+      js,
+      waitUntil: params.wait_until as string | undefined,
+      waitMs: typeof params.wait_ms === 'number' ? params.wait_ms : undefined,
+      timeoutMs: typeof params.timeout_ms === 'number' ? params.timeout_ms : undefined,
+      freshIp: params.fresh_ip === true,
+    });
+    return trace('web_eval', {
+      content: [{ type: 'text', text: JSON.stringify({ status: r.status, url: r.url, result: r.result }) }],
+      isError: false,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log('web_eval failed:', msg);
+    return trace('web_eval', { content: [{ type: 'text', text: `web_eval error: ${msg}` }], isError: true });
+  }
+}
+
+/**
+ * Same-origin in-page fetch on a warmed page, for origins that gate POSTs on an
+ * Akamai sensor cookie.
+ *
+ * Stateful, and the only tool here that is. The sidecar keeps one warmed page
+ * per (base_url, warm_path), pins it to a sticky residential exit and feeds the
+ * sensor on a keepalive so `_abck` stays validated (~0~); an unvalidated cookie
+ * means the POST is refused at the edge. Treat the warmed session as a shared
+ * resource: web_recycle, or anything that tears the browser down, costs whoever
+ * is mid-crawl their maturation.
+ */
+export async function web_spa_fetch(params: Record<string, unknown>): Promise<ToolResult> {
+  const baseUrl = params.base_url as string | undefined;
+  const path = params.path as string | undefined;
+  if (!baseUrl || !path) {
+    return {
+      content: [{ type: 'text', text: 'web_spa_fetch error: `base_url` and `path` are both required' }],
+      isError: true,
+    };
+  }
+  try {
+    const r = await camoufoxSpaFetch({
+      baseUrl,
+      path,
+      warmPath: params.warm_path as string | undefined,
+      method: params.method as string | undefined,
+      body: (params.body ?? undefined) as Record<string, unknown> | null | undefined,
+      accept: params.accept as string | undefined,
+      sensorWaitMs: typeof params.sensor_wait_ms === 'number' ? params.sensor_wait_ms : undefined,
+      maturProbe: (params.mature_probe ?? undefined) as Record<string, unknown> | null | undefined,
+      maturMaxTries: typeof params.mature_max_tries === 'number' ? params.mature_max_tries : undefined,
+      timeoutMs: typeof params.timeout_ms === 'number' ? params.timeout_ms : undefined,
+    });
+    return trace('web_spa_fetch', {
+      content: [{ type: 'text', text: JSON.stringify({ status: r.status, text: r.text }) }],
+      // The upstream status is data: 403 means the sensor has not cleared and the
+      // caller should re-mature or recycle, which is a decision, not an error.
+      isError: false,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log('web_spa_fetch failed:', msg);
+    return trace('web_spa_fetch', {
+      content: [{ type: 'text', text: `web_spa_fetch error: ${msg}` }],
+      isError: true,
+    });
+  }
+}
+
+/**
+ * Drop the warmed session and the render browser, and mint a fresh exit IP.
+ *
+ * Expensive (a full relaunch, ~30-60s) and destructive to anyone mid-crawl. The
+ * reason to reach for it is an exit IP the origin has rate-hardened, which does
+ * not recover on its own. For a fresh IP on a single request, pass fresh_ip to
+ * web_eval instead — a new context costs ~1s.
+ */
+export async function web_recycle(_params: Record<string, unknown>): Promise<ToolResult> {
+  try {
+    const r = await camoufoxRecycle();
+    return { content: [{ type: 'text', text: JSON.stringify(r) }], isError: false };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log('web_recycle failed:', msg);
+    return { content: [{ type: 'text', text: `web_recycle error: ${msg}` }], isError: true };
+  }
+}
+
 // ── Function map ─────────────────────────────────────────────────────
 
 export const functionMap: Record<string, (params: any) => Promise<any>> = {
@@ -510,4 +702,8 @@ export const functionMap: Record<string, (params: any) => Promise<any>> = {
   web_snapshots,
   web_archive,
   web_usage_stats,
+  web_bytes,
+  web_eval,
+  web_spa_fetch,
+  web_recycle,
 };

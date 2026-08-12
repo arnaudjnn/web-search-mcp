@@ -21,7 +21,10 @@ export type ToolName =
   | 'web_pdf'
   | 'web_execute_js'
   | 'web_snapshots'
-  | 'web_archive';
+  | 'web_archive'
+  | 'web_bytes'
+  | 'web_eval'
+  | 'web_spa_fetch';
 
 const startedAt = new Date().toISOString();
 
@@ -35,6 +38,9 @@ const counts: Record<ToolName, number> = {
   web_execute_js: 0,
   web_snapshots: 0,
   web_archive: 0,
+  web_bytes: 0,
+  web_eval: 0,
+  web_spa_fetch: 0,
 };
 
 // Per-tool bytes of returned payload. Used as a proxy-bandwidth proxy.
@@ -48,6 +54,9 @@ const bytes: Record<ToolName, number> = {
   web_execute_js: 0,
   web_snapshots: 0,
   web_archive: 0,
+  web_bytes: 0,
+  web_eval: 0,
+  web_spa_fetch: 0,
 };
 
 const errors: Record<ToolName, number> = {
@@ -60,6 +69,9 @@ const errors: Record<ToolName, number> = {
   web_execute_js: 0,
   web_snapshots: 0,
   web_archive: 0,
+  web_bytes: 0,
+  web_eval: 0,
+  web_spa_fetch: 0,
 };
 
 // Only Crawl4AI-backed tools accrue proxy bandwidth. SearXNG and
@@ -71,6 +83,10 @@ const PROXY_BACKED: ToolName[] = [
   'web_screenshot',
   'web_pdf',
   'web_execute_js',
+  // Camoufox-backed: these DO egress through a metered residential proxy.
+  'web_bytes',
+  'web_eval',
+  'web_spa_fetch',
 ];
 
 export function recordCall(tool: ToolName, payloadBytes: number, isError = false): void {

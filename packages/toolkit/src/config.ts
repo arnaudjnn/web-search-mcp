@@ -8,6 +8,7 @@ const envSchema = z.object({
   CRAWL4AI_URL: z.string().default('http://crawl4ai.railway.internal:11235'),
   CRAWL4AI_API_TOKEN: z.string().optional(),
   SCRAPLING_URL: z.string().default('http://scrapling.railway.internal:8000'),
+  CAMOUFOX_URL: z.string().default('http://camoufox.railway.internal:8000'),
 });
 // No PROXY_* here on purpose. Crawl4AI >= 0.9 refuses `proxy_config` (and
 // `extra_args`, `session_id`, `magic`, …) from any request body: every HTTP
@@ -33,6 +34,12 @@ export const Config = {
   // Owns residential egress + JS-challenge solving. See services/scrapling.
   scrapling: {
     url: env.SCRAPLING_URL,
+  },
+  // Stealth Firefox on an ITALIAN residential exit, plus the two things no
+  // other backend has: a binary fetch through that exit, and a warmed-session
+  // in-page fetch for Akamai-gated POSTs. See services/camoufox.
+  camoufox: {
+    url: env.CAMOUFOX_URL,
   },
   // One request, not three. The three parallel attempts were identical
   // queries hitting the same upstream engines through the same SearXNG, so

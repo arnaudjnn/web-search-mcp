@@ -8,6 +8,10 @@ import {
   WebCrawlInput,
   WebSnapshotsInput,
   WebArchiveInput,
+  WebBytesInput,
+  WebEvalInput,
+  WebSpaFetchInput,
+  WebRecycleInput,
   WebUsageStatsInput,
 } from './schemas.js';
 import type { ToolDefinition } from './types.js';
@@ -115,6 +119,64 @@ export const tools: ToolDefinition[] = [
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: true,
+    },
+  },
+  {
+    name: 'web_bytes',
+    description:
+      "Download a URL's raw bytes through a residential exit and return them base64-encoded. " +
+      'Use for PDFs and other binaries behind a bot-gated or geo-sensitive origin, where ' +
+      'rendering the page as text would lose the document.',
+    parameters: WebBytesInput,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  {
+    name: 'web_eval',
+    description:
+      'Evaluate JavaScript in a residential browser page and return its JSON result. Use for ' +
+      'driving or inspecting a JS app (open a facet, read the codes behind it) on a site that ' +
+      "bot-gates this host's own IP — web_execute_js runs from that IP and cannot reach them.",
+    parameters: WebEvalInput,
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  },
+  {
+    name: 'web_spa_fetch',
+    description:
+      'Perform a same-origin in-page fetch on a warmed browser session, for origins that gate ' +
+      'requests on an anti-bot sensor cookie. Stateful: one warmed page per (base_url, ' +
+      'warm_path), pinned to a sticky residential exit and kept alive so the sensor stays ' +
+      'validated. Returns the upstream status and body; a 403 means the sensor has not cleared.',
+    parameters: WebSpaFetchInput,
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  },
+  {
+    name: 'web_recycle',
+    description:
+      'Drop the warmed session and render browser and take a fresh exit IP. Expensive (a full ' +
+      'browser relaunch) and disruptive to any crawl in flight, so reach for it only when an ' +
+      'exit IP has been rate-hardened by a target. For a fresh IP on one request, pass ' +
+      'fresh_ip to web_eval instead.',
+    parameters: WebRecycleInput,
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
     },
   },
   {

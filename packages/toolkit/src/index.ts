@@ -8,6 +8,10 @@ export {
   WebCrawlInput,
   WebSnapshotsInput,
   WebArchiveInput,
+  WebBytesInput,
+  WebEvalInput,
+  WebSpaFetchInput,
+  WebRecycleInput,
   WebUsageStatsInput,
 } from './schemas.js';
 
@@ -24,12 +28,27 @@ export {
   web_snapshots,
   web_archive,
   web_usage_stats,
+  web_bytes,
+  web_eval,
+  web_spa_fetch,
+  web_recycle,
   functionMap,
 } from './functions.js';
 
 export { Config } from './config.js';
 export { getStats, recordCall } from './stats.js';
 export { scraplingFetch, ScraplingError } from './scrapling.js';
+export {
+  camoufoxRender,
+  camoufoxScreenshot,
+  camoufoxEval,
+  camoufoxBytes,
+  camoufoxSpaFetch,
+  camoufoxRecycle,
+  CamoufoxError,
+} from './camoufox.js';
+export { pickBackend, isItalianSource } from './routing.js';
+export type { Backend } from './routing.js';
 export type { ScraplingMode, ScraplingResult } from './scrapling.js';
 
 export type {

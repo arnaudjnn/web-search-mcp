@@ -1,0 +1,12 @@
+# Pinned deliberately, and pinned to what production already runs.
+#
+# This browser's whole value is a fingerprint that Akamai and Radware accept, so
+# an unattended bump can silently change what gets through — and the failure
+# reads as "the source went bot-gated", not "we upgraded a dependency". These
+# versions are what scartoffie's camoufox resolved to on its 2026-08-12 build
+# (from `camoufox[geoip]>=0.4`), i.e. the exact set the Akamai POST path is known
+# to clear with. Bump on purpose, then re-verify _abck reaches ~0~.
+camoufox[geoip]==0.5.4
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+pydantic==2.13.4

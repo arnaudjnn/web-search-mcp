@@ -188,6 +188,60 @@ export const WebArchiveInput = z.object({
     .describe('Get original content without Wayback Machine banner (default: false)'),
 });
 
+export const WebBytesInput = z.object({
+  url: z.string().url().describe('URL of the binary to download (e.g. a PDF)'),
+  timeout_ms: z.number().min(1000).max(180000).optional().describe('Fetch timeout (default: 60000)'),
+});
+
+export const WebEvalInput = z.object({
+  url: z.string().url().describe('URL to open'),
+  js: z
+    .string()
+    .describe('JS expression or IIFE evaluated in the page; must return JSON-serialisable data'),
+  wait_until: z
+    .enum(['load', 'domcontentloaded', 'networkidle', 'commit'])
+    .optional()
+    .describe('Navigation wait condition (default: networkidle)'),
+  wait_ms: z.number().min(0).max(60000).optional().describe('Extra settle time after load (default: 6000)'),
+  timeout_ms: z.number().min(1000).max(180000).optional().describe('Navigation timeout (default: 90000)'),
+  fresh_ip: z
+    .boolean()
+    .optional()
+    .describe(
+      'Serve this one request from a new browser context on a new exit IP, with clean cookies — ' +
+        'for targets metered per IP. Costs ~1s, unlike web_recycle.',
+    ),
+});
+
+export const WebSpaFetchInput = z.object({
+  base_url: z.string().url().describe('Origin to warm and fetch against'),
+  warm_path: z.string().optional().describe('Path navigated to warm the sensor (default: /)'),
+  method: z.string().optional().describe('HTTP method for the in-page fetch (default: GET)'),
+  path: z.string().describe('Same-origin path for the in-page fetch'),
+  body: z.record(z.unknown()).nullable().optional().describe('JSON body, sent as a JSON string'),
+  accept: z.string().optional().describe('Accept header (default: application/json)'),
+  sensor_wait_ms: z
+    .number()
+    .min(0)
+    .max(120000)
+    .optional()
+    .describe('Time spent seeding the sensor on a (re)warm (default: 20000)'),
+  mature_probe: z
+    .record(z.unknown())
+    .nullable()
+    .optional()
+    .describe(
+      'Optional {method,path,body,accept} probe used during warmup: interaction loops until this ' +
+        'stops returning 403, i.e. until the sensor cookie is accepted.',
+    ),
+  mature_max_tries: z.number().min(1).max(20).optional().describe('Maturation attempts (default: 6)'),
+  timeout_ms: z.number().min(1000).max(300000).optional().describe('Client timeout (default: 180000)'),
+});
+
+export const WebRecycleInput = z
+  .object({})
+  .describe('Drop the warmed session and render browser, and take a fresh exit IP. No parameters.');
+
 export const WebUsageStatsInput = z
   .object({})
   .describe('Process-local usage counters. No parameters.');
