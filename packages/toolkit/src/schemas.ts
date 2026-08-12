@@ -45,11 +45,45 @@ export const WebFetchInput = z.object({
 
 export const WebHtmlInput = z.object({
   url: z.string().url().describe('URL to fetch'),
-  // No engine/mode knob — see WebFetchInput.
+  // No engine/mode knob — see WebFetchInput. The parameters below are about how
+  // the PAGE should be treated, not which backend runs it: a list that
+  // lazy-loads into collapsed accordions is not fetchable without expanding
+  // them, whichever fetcher is used. They are honoured where the backend
+  // supports them and ignored where it does not.
   network_idle: z
     .boolean()
     .optional()
     .describe('Wait for the network to go quiet before returning (default: false)'),
+  wait_until: z
+    .enum(['load', 'domcontentloaded', 'networkidle', 'commit'])
+    .optional()
+    .describe('Navigation wait condition (default: load)'),
+  wait_ms: z
+    .number()
+    .min(0)
+    .max(60000)
+    .optional()
+    .describe('Extra settle time after load, in milliseconds'),
+  click_all: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'CSS selectors to click (every match) before capturing — for lists that lazy-load into ' +
+        'collapsed accordions or tabs, whose content is absent otherwise.',
+    ),
+  settle_ms: z
+    .number()
+    .min(0)
+    .max(30000)
+    .optional()
+    .describe('Time to let AJAX settle after click_all (default: 3000)'),
+  fresh_ip: z
+    .boolean()
+    .optional()
+    .describe(
+      'Serve this request from a new browser context on a new exit IP, with clean cookies — ' +
+        'for targets metered per IP. Costs ~1s.',
+    ),
   timeout_ms: z
     .number()
     .min(1000)

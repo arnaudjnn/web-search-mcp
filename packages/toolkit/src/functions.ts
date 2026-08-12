@@ -328,7 +328,17 @@ export async function web_html(params: Record<string, unknown>): Promise<ToolRes
 
   try {
     const page = isItalianSource(url)
-      ? await camoufoxRender({ url, timeoutMs }).then((r) => ({
+      ? await camoufoxRender({
+          url,
+          timeoutMs,
+          waitUntil:
+            (params.wait_until as string | undefined) ??
+            (params.network_idle === true ? 'networkidle' : undefined),
+          waitMs: typeof params.wait_ms === 'number' ? params.wait_ms : undefined,
+          clickAll: Array.isArray(params.click_all) ? (params.click_all as string[]) : undefined,
+          settleMs: typeof params.settle_ms === 'number' ? params.settle_ms : undefined,
+          freshIp: params.fresh_ip === true,
+        }).then((r) => ({
           status: r.status,
           url: r.url,
           html: r.html,
@@ -339,7 +349,8 @@ export async function web_html(params: Record<string, unknown>): Promise<ToolRes
       : await scraplingFetch({
           url,
           timeoutMs,
-          networkIdle: params.network_idle === true,
+          networkIdle:
+            params.network_idle === true || params.wait_until === 'networkidle',
         });
     const result: ToolResult = {
       content: [
