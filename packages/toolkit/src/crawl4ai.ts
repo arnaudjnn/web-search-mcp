@@ -44,16 +44,32 @@ async function getClient(): Promise<Client> {
 }
 
 /**
- * Errors that mean Crawl4AI handed us a browser that is already dead.
+ * Crawl4AI's opaque 5xx envelope: `{"error": 500, "detail": "…correlation_id…"}`.
  *
- * Its pool caches browsers by config signature and does not check liveness
- * before reuse, so once one dies every subsequent crawl on that signature fails
- * identically. The tell is that /monitor/browsers looks *healthy* — it reported
- * 2 browsers at 100% reuse while returning this on every request, because it was
- * faithfully reusing a closed browser.
+ * This is the ONLY thing a client sees when a crawl fails server-side. Crawl4AI
+ * deliberately withholds the cause and logs it on its own side, so the useful
+ * detail (a dead pooled browser, or an anti-bot 403 it reports as a 500) never
+ * reaches us.
+ *
+ * A previous version of this matched on "Target page, context or browser has been
+ * closed" and could therefore never fire: that text only ever exists in
+ * Crawl4AI's log. Detect the envelope instead, and treat it as "retry once,
+ * after clearing the pool".
+ *
+ * Both underlying causes are worth one retry. A dead browser is fixed by eviction
+ * (its pool caches browsers by config signature and never checks liveness, so it
+ * will hand out a closed one indefinitely). A transient anti-bot 403 is fixed by
+ * simply trying again, which was measured succeeding 4/4 after a single failure.
  */
-const STALE_BROWSER_RE =
-  /Target page, context or browser has been closed|BrowserContext\.new_page|Unexpected error in _crawl_web/i;
+function isOpaqueServerError(text: string): boolean {
+  if (!text.startsWith('{')) return false;
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown };
+    return typeof parsed.error === 'number' && parsed.error >= 500;
+  } catch {
+    return false;
+  }
+}
 
 let recovering: Promise<void> | null = null;
 
@@ -120,16 +136,14 @@ async function call(name: string, args: Record<string, unknown>) {
 
   const result = (await invoke()) as { content?: Array<{ text?: string }> };
 
-  // A dead pooled browser surfaces as a successful tool call whose text is a 500
-  // envelope, so it has to be sniffed from the payload rather than caught.
+  // A server-side failure arrives as a SUCCESSFUL tool call whose text is the
+  // opaque envelope, so it has to be sniffed from the payload rather than caught.
   const text = result?.content?.[0]?.text ?? '';
-  if (STALE_BROWSER_RE.test(text)) {
-    process.stderr.write(`[crawl4ai] ${name}: stale browser detected — ${text.slice(0, 160)}\n`);
-    await evictDeadBrowsers();
-    return invoke();
-  }
+  if (!isOpaqueServerError(text)) return result;
 
-  return result;
+  process.stderr.write(`[crawl4ai] ${name}: server error, evicting pool and retrying once\n`);
+  await evictDeadBrowsers();
+  return invoke();
 }
 
 /**
@@ -216,12 +230,7 @@ export async function renderMarkdown(
   return data.markdown || null;
 }
 
-/** True when a /md failure is a dead pooled browser rather than a real error. */
-export function isStaleBrowserError(err: unknown): boolean {
-  return STALE_BROWSER_RE.test(err instanceof Error ? err.message : String(err));
-}
 
-export { evictDeadBrowsers };
 
 export const callCrawlTool = (args: Record<string, unknown>) => call('crawl', args);
 export const callMdTool = (args: Record<string, unknown>) => call('md', args);

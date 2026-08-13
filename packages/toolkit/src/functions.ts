@@ -1,7 +1,6 @@
 import {
   callCrawlTool,
   callExecuteJsTool,
-  callMdTool,
   callPdfTool,
   callScreenshotTool,
   renderMarkdown,
@@ -124,6 +123,70 @@ async function proxyCrawl4AI(
   }
 }
 
+// ── Fetching ─────────────────────────────────────────────────────────
+
+/** A fetched page, normalised across the backends that can produce one. */
+type FetchedPage = {
+  status: number;
+  url: string;
+  html: string;
+  size: number;
+  mode: string;
+  escalated: boolean;
+};
+
+/**
+ * Fetch a page through the backend the host calls for.
+ *
+ * Both web_fetch and web_html need this and used to each carry their own copy of
+ * the Camoufox-to-page mapping, which is how web_html ended up without the
+ * Crawl4AI host preference that web_fetch had: the same URL was fast through one
+ * tool and slow through the other. One function, one routing decision.
+ */
+type PageOpts = {
+  timeoutMs?: number;
+  waitUntil?: string;
+  waitMs?: number;
+  clickAll?: string[];
+  settleMs?: number;
+  freshIp?: boolean;
+};
+
+async function fetchPage(url: string, opts: PageOpts = {}): Promise<FetchedPage> {
+  const timeoutMs = opts.timeoutMs ?? 60_000;
+
+  if (isItalianSource(url)) {
+    const r = await camoufoxRender({ url, timeoutMs, ...opts });
+    return {
+      status: r.status,
+      url: r.url,
+      html: r.html,
+      size: r.html.length,
+      mode: 'camoufox',
+      escalated: false,
+    };
+  }
+
+  // No mode passed: the sidecar routes by host and escalates to a challenge
+  // solve only on evidence. It takes networkIdle rather than the full set of
+  // page knobs, so the rest are honoured where supported and dropped here.
+  return scraplingFetch({ url, timeoutMs, networkIdle: opts.waitUntil === 'networkidle' });
+}
+
+/** The page-behaviour knobs, read off a tool's params. */
+function pageOptsFrom(params: Record<string, unknown>, timeoutMs?: number): PageOpts {
+  return {
+    timeoutMs,
+    waitUntil:
+      (params.wait_until as string | undefined) ??
+      (params.network_idle === true ? 'networkidle' : undefined),
+    waitMs: typeof params.wait_ms === 'number' ? params.wait_ms : undefined,
+    clickAll: Array.isArray(params.click_all) ? (params.click_all as string[]) : undefined,
+    settleMs: typeof params.settle_ms === 'number' ? params.settle_ms : undefined,
+    freshIp: params.fresh_ip === true,
+  };
+}
+
 // ── Tool handler functions ───────────────────────────────────────────
 
 export async function web_search(params: {
@@ -168,24 +231,6 @@ function markdownFromCrawlResult(
   }
   if (!md) return null;
   return { md, success: r.success !== false };
-}
-
-/**
- * Render already-fetched HTML to markdown using Crawl4AI's own markdown
- * pipeline. This is what lets the fetch move to Scrapling without changing
- * web_fetch's output contract: the `f` filter (raw/fit/bm25/llm) is implemented
- * by Crawl4AI's markdown generator, so reimplementing HTML->markdown here would
- * silently change every caller's output.
- *
- * Goes over REST, not MCP — see renderMarkdown() for the 100x reason.
- */
-async function htmlToMarkdown(
-  html: string,
-  filter: string,
-  query?: string,
-  sourceUrl?: string,
-): Promise<string | null> {
-  return renderMarkdown(html, filter, query, sourceUrl);
 }
 
 /** Fetch a URL through Crawl4AI directly. The fallback when Scrapling is down. */
@@ -243,22 +288,11 @@ export async function web_fetch(params: Record<string, unknown>): Promise<ToolRe
 
   let result: ToolResult;
   try {
-    const page = isItalianSource(url)
-      ? await camoufoxRender({ url, timeoutMs: 60_000 }).then((r) => ({
-          status: r.status,
-          url: r.url,
-          html: r.html,
-          size: r.html.length,
-          mode: 'camoufox' as const,
-          escalated: false,
-        }))
-      : // No mode passed: the sidecar routes by host and escalates to a
-        // challenge solve only on evidence.
-        await scraplingFetch({ url, timeoutMs: 60_000 });
+    const page = await fetchPage(url, { timeoutMs: 60_000 });
     // Pass the URL we actually landed on (after redirects) so relative links
     // resolve against the right origin.
     const md = page.html
-      ? await htmlToMarkdown(page.html, filter, params.q as string | undefined, page.url || url)
+      ? await renderMarkdown(page.html, filter, params.q as string | undefined, page.url || url)
       : null;
 
     if (md) {
@@ -340,31 +374,7 @@ export async function web_html(params: Record<string, unknown>): Promise<ToolRes
   }
 
   try {
-    const page = isItalianSource(url)
-      ? await camoufoxRender({
-          url,
-          timeoutMs,
-          waitUntil:
-            (params.wait_until as string | undefined) ??
-            (params.network_idle === true ? 'networkidle' : undefined),
-          waitMs: typeof params.wait_ms === 'number' ? params.wait_ms : undefined,
-          clickAll: Array.isArray(params.click_all) ? (params.click_all as string[]) : undefined,
-          settleMs: typeof params.settle_ms === 'number' ? params.settle_ms : undefined,
-          freshIp: params.fresh_ip === true,
-        }).then((r) => ({
-          status: r.status,
-          url: r.url,
-          html: r.html,
-          size: r.html.length,
-          mode: 'camoufox' as const,
-          escalated: false,
-        }))
-      : await scraplingFetch({
-          url,
-          timeoutMs,
-          networkIdle:
-            params.network_idle === true || params.wait_until === 'networkidle',
-        });
+    const page = await fetchPage(url, pageOptsFrom(params, timeoutMs));
     const result: ToolResult = {
       content: [
         {

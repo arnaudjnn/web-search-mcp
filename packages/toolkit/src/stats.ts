@@ -76,14 +76,17 @@ const errors: Record<ToolName, number> = {
 
 // Only Crawl4AI-backed tools accrue proxy bandwidth. SearXNG and
 // Wayback are direct HTTP, not residential-proxied.
+// Only the tools that egress through a metered residential proxy. The
+// Crawl4AI-backed ones (web_crawl, web_screenshot, web_pdf, web_execute_js) used
+// to be listed here and were inflating the estimate: Crawl4AI >= 0.9 refuses a
+// proxy, so those go out on this host's own IP and cost nothing per byte.
+//
+// web_fetch and web_html stay, with a caveat: both fall back to Crawl4AI when a
+// sidecar is unreachable, and a Crawl4AI-preferred host never touches the proxy
+// at all, so their bytes are an upper bound rather than a measurement.
 const PROXY_BACKED: ToolName[] = [
   'web_fetch',
   'web_html',
-  'web_crawl',
-  'web_screenshot',
-  'web_pdf',
-  'web_execute_js',
-  // Camoufox-backed: these DO egress through a metered residential proxy.
   'web_bytes',
   'web_eval',
   'web_spa_fetch',
