@@ -86,6 +86,13 @@ does not fix it (it uploads the right files while the stored config still points
 `/`), and the CLI cannot set the field, so use the dashboard or the API mutation
 documented in the README.
 
+**Both stealth sidecars run 2 replicas**, and that is a throughput requirement
+rather than redundancy. Each container serves one request per mode at a time (one
+warmed session per mode, pinned to a single-slot executor), so concurrent callers
+queue. Under a live signal sweep on a single replica, an unrelated fetch waited
+behind the queue for the full client budget and then fell back to the plain
+datacenter browser: measured 90.5s, and 0.7s once a second replica was added.
+
 **Scale the browsers by replicas, not workers.** Camoufox keeps `WORKERS=1`: a
 warmed anti-bot session cannot be shared across processes. Use
 `railway service scale --service camoufox eu-west=2`, and note `scale` ADDS to the
