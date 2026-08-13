@@ -20,7 +20,7 @@ import sys
 import time
 import urllib.request
 
-STATE = os.path.expanduser("~/.railway-health-state.json")
+STATE = os.path.expanduser("~/.tools-health-state.json")
 REDEPLOY_COOLDOWN_S = 900  # 15 min: long enough that a crashloop is not amplified
 CRAWL4AI_URL = "https://crawl4ai-production-9a95.up.railway.app"  # no public domain: internal only
 TOOLS_URL = "https://tools-production-d199.up.railway.app"
@@ -187,7 +187,7 @@ def main() -> int:
             print(" ", recycle(args.apply))
 
     if not args.apply:
-        print("\n  (plan only — re-run with --apply to act)")
+        print("\n  (plan only; re-run with --apply to act)")
     return 0
 
 

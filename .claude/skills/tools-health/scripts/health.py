@@ -29,7 +29,7 @@ SERVICES = ["Tools", "SearXNG", "Crawl4AI", "Scrapling", "Camoufox"]
 #
 # These are reported as CONTEXT, never as actions, for two reasons. `railway logs`
 # returns a window of history with no way to ask "only the last N minutes", so a
-# signature from hours ago — already self-healed — still matches now. And the Tools
+# signature from hours ago, already self-healed, still matches now. And the Tools
 # service already evicts and retries on its own, so a dead-browser line is usually
 # the record of a fix rather than a live fault.
 #
@@ -145,7 +145,7 @@ def check_probes(findings: list[dict], key: str) -> None:
         if mode != "stealth":
             findings.append({"check": "probe", "service": "Scrapling", "severity": "error",
                              "detail": f"linkedin served by mode={mode} (expected stealth) "
-                                       f"status={status} — silent downgrade",
+                                       f"status={status}: silent downgrade",
                              "action": "redeploy"})
         elif status != 200:
             findings.append({"check": "probe", "service": "Scrapling", "severity": "warn",
@@ -190,7 +190,7 @@ def main() -> int:
 
     key = api_key()
     if not key:
-        print("railway-health: cannot read API_KEY (set WEB_TOOLS_API_KEY or `railway link`)")
+        print("tools-health: cannot read API_KEY (set WEB_TOOLS_API_KEY or `railway link`)")
         return 2
 
     findings: list[dict] = []
@@ -207,10 +207,10 @@ def main() -> int:
         warns = [f for f in findings if f["severity"] == "warn"]
         infos = [f for f in findings if f["severity"] == "info"]
         if not errors and not warns:
-            print("railway-health: web-tools OK (services online, search and stealth path verified)"
+            print("tools-health: web-tools OK (services online, search and stealth path verified)"
                   + (f"; {len(infos)} historical log note(s) below" if infos else ""))
         else:
-            print(f"railway-health: {len(errors)} error(s), {len(warns)} warning(s), "
+            print(f"tools-health: {len(errors)} error(s), {len(warns)} warning(s), "
                   f"{len(infos)} note(s)")
             for f in findings:
                 svc = f.get("service", "-")

@@ -1,9 +1,9 @@
 ---
-name: railway-health
-description: Check whether the web-tools Railway stack is actually working and heal it when it is not. Diagnoses from three sources — service state, known log signatures, and live tool probes that assert which BACKEND served a request — then applies only the remediations known to fix this stack (evict a dead browser pool, recycle a wedged anti-bot session, redeploy a degraded service). Use whenever web_search returns nothing, a fetch is slow or comes back from the wrong engine, a deploy looks green but behaves wrong, or the user asks to check Railway logs, check tool health, or fix/heal the tools.
+name: tools-health
+description: Check whether the web-tools Railway stack is actually working and heal it when it is not. Diagnoses from three sources (service state, known log signatures, and live tool probes that assert which BACKEND served a request), then applies only the remediations known to fix this stack (evict a dead browser pool, recycle a wedged anti-bot session, redeploy a degraded service). Use whenever web_search returns nothing, a fetch is slow or comes back from the wrong engine, a deploy looks green but behaves wrong, or the user asks to check Railway logs, check tool health, or fix/heal the tools.
 ---
 
-# railway-health
+# tools-health
 
 Diagnose and repair the web-tools stack: `Tools`, `SearXNG`, `Crawl4AI`,
 `Scrapling`, `Camoufox`, `Redis` in project `3375ebc9-cb5f-42ac-999d-b1d3b8feb5ef`.
@@ -28,7 +28,7 @@ interpreting anything; it maps each signature to its confirmed cause and fix.
 
 2. **Diagnose.** Read-only, ~60s:
    ```bash
-   python3 .claude/skills/railway-health/scripts/health.py
+   python3 .claude/skills/tools-health/scripts/health.py
    ```
    `--fast` skips the log scan and deep probes (~10s, for a SessionStart hook).
    `--json` emits machine-readable findings for step 3.
@@ -36,9 +36,9 @@ interpreting anything; it maps each signature to its confirmed cause and fix.
 
 3. **Heal, deliberately.** Look at the plan before acting:
    ```bash
-   python3 .claude/skills/railway-health/scripts/health.py --json > /tmp/h.json
-   python3 .claude/skills/railway-health/scripts/heal.py --findings /tmp/h.json
-   python3 .claude/skills/railway-health/scripts/heal.py --findings /tmp/h.json --apply
+   python3 .claude/skills/tools-health/scripts/health.py --json > /tmp/h.json
+   python3 .claude/skills/tools-health/scripts/heal.py --findings /tmp/h.json
+   python3 .claude/skills/tools-health/scripts/heal.py --findings /tmp/h.json --apply
    ```
    Redeploys are rate-limited to one per service per 15 minutes, so a crashloop
    cannot be amplified into a restart loop.
@@ -55,7 +55,7 @@ interpreting anything; it maps each signature to its confirmed cause and fix.
 
 `heal.py` cannot delete a service, change a domain, edit a variable, or scale
 anything. Those either cannot be undone by retrying, or change the security
-posture — only `Tools` should have a public domain, and removing a domain is what
+posture. Only `Tools` should have a public domain, and removing a domain is what
 makes a service private. If the fix is one of those, it is reported as `manual`.
 
 ## Running it on a schedule
@@ -69,8 +69,8 @@ watching to outlive the conversation.
   `.claude/settings.json` running `health.py --fast`. Its output becomes context,
   so a session opens already knowing whether the stack is degraded. Keep it
   `--fast` and read-only: it runs on *every* session start, and a 60s sweep there
-  would be a tax on every conversation. A hook cannot heal — it is a shell
-  command, not a Claude turn — it only surfaces the problem for you to act on.
+  would be a tax on every conversation. A hook cannot heal, being a shell command
+  rather than a Claude turn; it only surfaces the problem for you to act on.
   Use the `update-config` skill to add it.
 
 - **While you are away.** `/schedule` a routine, which runs as a cloud agent on a
