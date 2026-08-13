@@ -4,7 +4,7 @@ Web Tools is an open-source web toolkit that gives AI agents fourteen tools to s
 
 ## About Hosting Web Tools
 
-This template deploys a complete self-hosted web toolkit as six services on Railway: **Redis**, **SearXNG** (privacy-respecting metasearch engine), **Crawl4AI** (headless browser for content extraction, screenshots, PDFs, and JS execution), **Scrapling** (stealth fetching — residential egress and JS-challenge solving), **Camoufox** (stealth Firefox on a geo-targeted residential exit, for sources that refuse anything else), and the **Web Tools Server** that ties them together. An API key is auto-generated at deploy time to secure your endpoint. Once deployed, any MCP-compatible client (Claude Code, Claude Desktop, Cursor, Windsurf, etc.) can connect over HTTP and use all fourteen tools. A REST API (`POST /api/v0/{tool_name}`) is also available for non-MCP integrations. No per-query fees, no third-party API keys, no usage limits. You own the infrastructure and the data never leaves your stack.
+This template deploys a complete self-hosted web toolkit as six services on Railway: **Redis**, **SearXNG** (privacy-respecting metasearch engine), **Crawl4AI** (headless browser for content extraction, screenshots, PDFs, and JS execution), **Scrapling** (stealth fetching: residential egress and JS-challenge solving), **Camoufox** (stealth Firefox on a geo-targeted residential exit, for sources that refuse anything else), and the **Web Tools Server** that ties them together. An API key is auto-generated at deploy time to secure your endpoint. Once deployed, any MCP-compatible client (Claude Code, Claude Desktop, Cursor, Windsurf, etc.) can connect over HTTP and use all fourteen tools. A REST API (`POST /api/v0/{tool_name}`) is also available for non-MCP integrations. No per-query fees, no third-party API keys, no usage limits. You own the infrastructure and the data never leaves your stack.
 
 ## Common Use Cases
 
@@ -17,10 +17,10 @@ This template deploys a complete self-hosted web toolkit as six services on Rail
 
 - **Redis** (7-alpine): In-memory cache used by SearXNG for rate limiting and result caching
 - **SearXNG**: Privacy-respecting metasearch engine that aggregates results from Google, Brave, DuckDuckGo, and more. Builds from `services/searxng/Dockerfile` with optional `PROXY_URL` support for outgoing requests
-- **Crawl4AI**: Headless browser service for crawling, screenshots, PDFs and JavaScript execution, and for rendering HTML to markdown. Note Crawl4AI >= 0.9 refuses `proxy_config` from a request body, so it always egresses on its own IP — pin the image rather than tracking `:latest`
+- **Crawl4AI**: Headless browser service for crawling, screenshots, PDFs and JavaScript execution, and for rendering HTML to markdown. Note Crawl4AI >= 0.9 refuses `proxy_config` from a request body, so it always egresses on its own IP. Pin the image rather than tracking `:latest`
 - **Scrapling**: Stealth fetch sidecar that serves `web_fetch` and `web_html`. Owns the rotating residential egress (for IP-reputation walls such as LinkedIn) and the JS-challenge solving (for Cloudflare-style walls) that Crawl4AI structurally cannot do. Builds from `services/scrapling/Dockerfile`; set `PROXY_URL` on it to enable `mode=stealth`
-- **Camoufox**: Stealth Firefox sidecar on a **geo-targeted** residential exit, with a fingerprint whose locale and timezone derive from the exit IP. Serves the sources the other two cannot reach at all — ones that bot-gate datacenter IPs outright, or score the exit country as part of an anti-bot sensor decision. Also owns the two capabilities nothing else here has: a binary/PDF fetch through that exit (`web_bytes`) and warmed anti-bot sensor sessions (`web_spa_fetch`). Builds from `services/camoufox/Dockerfile`; set `PROXY_URL` (geo-targeted) and keep `WORKERS=1`
-- **Web Tools Server** (Node.js 22): The HTTP server exposing MCP and REST API endpoints. Builds from the **repo-root `Dockerfile`** — do not delete it, it is this service's build
+- **Camoufox**: Stealth Firefox sidecar on a **geo-targeted** residential exit, with a fingerprint whose locale and timezone derive from the exit IP. Serves the sources the other two cannot reach at all: ones that bot-gate datacenter IPs outright, or score the exit country as part of an anti-bot sensor decision. Also owns the two capabilities nothing else here has: a binary/PDF fetch through that exit (`web_bytes`) and warmed anti-bot sensor sessions (`web_spa_fetch`). Builds from `services/camoufox/Dockerfile`; set `PROXY_URL` (geo-targeted) and keep `WORKERS=1`
+- **Web Tools Server** (Node.js 22): The HTTP server exposing MCP and REST API endpoints. Builds from the **repo-root `Dockerfile`**. Do not delete it; it is this service's build
 
 ### Deployment Dependencies
 
@@ -33,7 +33,7 @@ This template deploys a complete self-hosted web toolkit as six services on Rail
 
 The Web Tools Server exposes two interfaces:
 
-**MCP** — Streamable HTTP endpoint at `/mcp` for MCP clients:
+**MCP**: Streamable HTTP endpoint at `/mcp` for MCP clients:
 
 ```json
 {
@@ -49,7 +49,7 @@ The Web Tools Server exposes two interfaces:
 }
 ```
 
-**REST API** — Standard HTTP endpoints at `/api/v0/{tool_name}`:
+**REST API**: Standard HTTP endpoints at `/api/v0/{tool_name}`:
 
 ```bash
 curl -X POST https://your-server.up.railway.app/api/v0/web_search \
@@ -60,9 +60,9 @@ curl -X POST https://your-server.up.railway.app/api/v0/web_search \
 
 The fourteen tools available are: `web_search`, `web_fetch`, `web_html`, `web_screenshot`, `web_pdf`, `web_execute_js`, `web_crawl`, `web_bytes`, `web_eval`, `web_spa_fetch`, `web_recycle`, `web_snapshots`, `web_archive`, and `web_usage_stats`.
 
-Callers never choose a fetch engine. Which of the three browsers serves a URL — and
-whether it egresses through a residential proxy, in which country, or solves a JS
-challenge — is decided from the host inside the server. Adding a knob for it would
+Callers never choose a fetch engine. Which of the three browsers serves a URL,
+and whether it egresses through a residential proxy, in which country, or solves a
+JS challenge, is decided from the host inside the server. Adding a knob for it would
 put the burden of knowing which engine can reach which site on every caller.
 
 ### Railway Service Configuration
@@ -73,31 +73,31 @@ put the burden of knowing which engine can reach which site on every caller.
 | SearXNG | GitHub repo | `services/searxng` | Optional `PROXY_URL` |
 | Scrapling | GitHub repo | `services/scrapling` | `PROXY_URL` (US-geo), `PORT=8000` |
 | Camoufox | GitHub repo | `services/camoufox` | `PROXY_URL` (target-geo), `PORT=8000`, `WORKERS=1` |
-| Crawl4AI | Docker image (pin the tag) | — | `CRAWL4AI_API_TOKEN` |
-| Redis | Docker image | — | Used by SearXNG |
+| Crawl4AI | Docker image (pin the tag) | n/a | `CRAWL4AI_API_TOKEN` |
+| Redis | Docker image | n/a | Used by SearXNG |
 
 **Set Root Directory before connecting a subfolder service to the repo.** Railway
 resolves a service's build config by walking up from its Root Directory, so a
-subfolder service without one inherits the repo root's `Dockerfile` — the Node
-server. The build then goes green and the container crashes on `ZodError: API_KEY
+subfolder service without one inherits the repo root's `Dockerfile`, which is the
+Node server. The build then goes green and the container crashes on `ZodError: API_KEY
 Required`, because it is running the wrong program; and it repeats on every push,
 so a service deployed correctly by hand will replace itself later. `railway up`
 does not fix it (it uploads the right files while the stored config still points at
-`/`), and the CLI cannot set the field — use the dashboard, or the API mutation
+`/`), and the CLI cannot set the field, so use the dashboard or the API mutation
 documented in the README.
 
 **Scale the browsers by replicas, not workers.** Camoufox keeps `WORKERS=1`: a
 warmed anti-bot session cannot be shared across processes. Use
 `railway service scale --service camoufox eu-west=2`, and note `scale` ADDS to the
-existing regions — pass `us-east=0` to move rather than spread, or you get replicas
-on two continents and a transatlantic round trip per request.
+existing regions, so pass `us-east=0` to move rather than spread. Otherwise you get
+replicas on two continents and a transatlantic round trip per request.
 
 **Give only the Web Tools Server a public domain.** It is the authenticated front
 door; the other five talk over Railway's private network and should have no domain
 at all. SearXNG in particular has no authentication of its own, so a public domain
 makes it an open search proxy whose outgoing requests spend your metered
-`PROXY_URL` bandwidth — and `SEARXNG_SECRET_KEY` does not change that, because it is
-an internal signing secret, not a credential. `CRAWL4AI_API_TOKEN` *is* a
+`PROXY_URL` bandwidth. `SEARXNG_SECRET_KEY` does not change that, because it is an
+internal signing secret rather than a credential. `CRAWL4AI_API_TOKEN` *is* a
 credential, and it is the only thing between an exposed Crawl4AI and free use of
 your browser fleet. Removing the domain is what makes a service private; removing
 its credentials just makes it broken or open.

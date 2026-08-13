@@ -1,6 +1,6 @@
 # Web Tools
 
-A self-hosted web toolkit providing fourteen tools for search, content extraction, and archival. Available as an [MCP](https://modelcontextprotocol.io/) server, REST API, and CLI — powered by [SearXNG](https://github.com/searxng/searxng), [Crawl4AI](https://github.com/unclecode/crawl4ai), [Scrapling](https://github.com/D4Vinci/Scrapling), [Camoufox](https://github.com/daijro/camoufox), and the [Wayback Machine](https://web.archive.org/).
+A self-hosted web toolkit providing fourteen tools for search, content extraction, and archival. Available as an [MCP](https://modelcontextprotocol.io/) server, REST API, and CLI, powered by [SearXNG](https://github.com/searxng/searxng), [Crawl4AI](https://github.com/unclecode/crawl4ai), [Scrapling](https://github.com/D4Vinci/Scrapling), [Camoufox](https://github.com/daijro/camoufox), and the [Wayback Machine](https://web.archive.org/).
 
 ## Architecture
 
@@ -20,24 +20,24 @@ graph LR
 
 ### Why three fetchers
 
-They are not redundant — each reaches pages the others cannot, and the split is
-measured, not aesthetic:
+They are not redundant. Each reaches pages the others cannot, and the split is
+measured rather than aesthetic:
 
 | | Crawl4AI | Scrapling | Camoufox |
 | --- | --- | --- | --- |
 | Browser | Chromium | Patchright Chromium | **Firefox** |
 | Egress | this host's IP only¹ | rotating **US** residential | rotating **Italian** residential |
 | JS challenges | no | yes (`solve`) | n/a (coherent fingerprint) |
-| LinkedIn profiles | decays to 0/6, HTTP 999 | 94% (34/36) | — |
-| Trustpilot reviews | luck-of-the-IP | 2/2 via challenge solve | — |
+| LinkedIn profiles | decays to 0/6, HTTP 999 | 94% (34/36) | not measured |
+| Trustpilot reviews | luck-of-the-IP | 2/2 via challenge solve | not measured |
 | Italian bot-gated sites | blocked | wrong country | **the point** |
-| Binary / PDF fetch | — | — | yes (`web_bytes`) |
-| Anti-bot sensor sessions | — | — | yes (`web_spa_fetch`) |
+| Binary / PDF fetch | no | no | yes (`web_bytes`) |
+| Anti-bot sensor sessions | no | no | yes (`web_spa_fetch`) |
 | Ordinary pages | ~2-5s | ~0.7-1.9s (`fast`) | ~8-12s |
 
 Camoufox is Firefox on purpose: stealth-patched headless *Chrome* was flagged by
 Akamai even through an Italian residential IP, while Camoufox's fingerprint is
-internally coherent — its locale and timezone are derived from the exit IP, so
+internally coherent: its locale and timezone are derived from the exit IP, so
 `web_eval` on an Italian site reports `Europe/Rome`. Italian sources either
 bot-gate datacenter IPs outright or score the exit country as part of a sensor
 decision, and a US residential exit is not a milder version of the right answer.
@@ -62,7 +62,7 @@ reach it is decided internally, in three tiers:
 `fast` is the default rather than `solve` even though `solve` is functionally a
 superset: solving roughly doubles latency on ordinary pages, and on a challenge
 it *cannot* solve it blocks for the whole timeout instead of failing fast. So
-solving is paid for only on evidence — a small body carrying a known
+solving is paid for only on evidence. A small body carrying a known
 interstitial title with a 403/429/503 gets retried once in `solve`, and the
 response reports `escalated: true`.
 
@@ -75,9 +75,9 @@ input) so the `f` filter keeps working. `web_crawl`, `web_execute_js`,
 
 The project is structured as a **monorepo** with three packages:
 
-- **`packages/toolkit`** — Core business logic: Zod schemas, tool definitions, SearXNG/Crawl4AI/Wayback clients. Framework-agnostic.
-- **`packages/api`** — Express HTTP server exposing MCP (`POST /mcp`) and REST (`POST /api/v0/{tool_name}`) endpoints.
-- **`packages/cli`** — Commander.js CLI for terminal usage.
+- **`packages/toolkit`**: Core business logic: Zod schemas, tool definitions, SearXNG/Crawl4AI/Wayback clients. Framework-agnostic.
+- **`packages/api`**: Express HTTP server exposing MCP (`POST /mcp`) and REST (`POST /api/v0/{tool_name}`) endpoints.
+- **`packages/cli`**: Commander.js CLI for terminal usage.
 
 The full stack deploys as **6 services**: Redis, SearXNG, Crawl4AI, Scrapling, Camoufox, and the Web Tools server.
 
@@ -113,13 +113,13 @@ Returns the page content as markdown.
 
 **There is no engine or mode parameter.** Which fetcher runs, whether it goes
 out through the residential proxy, and whether it solves a JS challenge are all
-decided under the hood — see [Fetch strategy](#fetch-strategy).
+decided under the hood. See [Fetch strategy](#fetch-strategy).
 
 ### `web_html`
 
 Fetch a URL and return the raw HTML as served, plus the upstream status. Use
 this rather than `web_fetch` when you need markup that markdown conversion
-destroys — JSON-LD, meta tags, attributes.
+destroys: JSON-LD, meta tags, attributes.
 
 | Parameter      | Type              | Description                                             |
 | -------------- | ----------------- | ------------------------------------------------------- |
@@ -254,7 +254,7 @@ claude mcp add web_tools \
 Every tool is also available as a REST endpoint:
 
 ```bash
-# Discovery — list all tools
+# Discovery: list all tools
 curl https://your-server.up.railway.app/api/v0 \
   -H "Authorization: Bearer your-api-key"
 
@@ -332,18 +332,18 @@ claude mcp add web_tools --scope user \
 
 ### Railway Configuration
 
-The **Web Tools Server** service uses the root `Dockerfile` — no config changes needed.
+The **Web Tools Server** service uses the root `Dockerfile`, so no config changes are needed.
 
 The **SearXNG** and **Scrapling** services build from the repo instead of a Docker
 image, and each one **must** have its Root Directory set:
 
 | Service | Root Directory | Env |
 | --- | --- | --- |
-| SearXNG | `services/searxng` | `PROXY_URL` (optional) — proxy for outgoing search requests |
+| SearXNG | `services/searxng` | `PROXY_URL` (optional), the proxy for outgoing search requests |
 | Scrapling | `services/scrapling` | `PROXY_URL` (US-geo, for the residential path), `PORT=8000` |
 | Camoufox | `services/camoufox` | `PROXY_URL` (**IT-geo**), `PORT=8000`, `WORKERS=1` |
 
-> Camoufox keeps `WORKERS=1` — one warmed anti-bot session per container, which
+> Camoufox keeps `WORKERS=1`, because one warmed anti-bot session per container
 > cannot be shared across processes. Scale it with **replicas**, not workers:
 > `railway service scale --service camoufox eu-west=2`. Keep it in EU West; a US
 > container reaches an Italian exit and an Italian target across the Atlantic
@@ -352,13 +352,13 @@ image, and each one **must** have its Root Directory set:
 
 > **Set Root Directory before connecting the repo.** Railway resolves a service's
 > build config by walking up from its Root Directory, so a subfolder service
-> without one inherits the repo root's `Dockerfile` — which is the Node server.
+> without one inherits the repo root's `Dockerfile`, which is the Node server.
 > The symptom is confusing: the build goes green, then the container crashes on
 > `ZodError: API_KEY Required`, because it is running the API server instead of
 > the sidecar. It also repeats on every push, so a service deployed correctly by
 > hand will replace itself with the API server the next time the repo changes.
 >
-> `railway up` cannot fix this — it uploads the right files but leaves the stored
+> `railway up` cannot fix this: it uploads the right files but leaves the stored
 > config pointing at `/`. Root Directory is not exposed by the CLI either; set it
 > in the dashboard, or via the public API:
 >
@@ -372,7 +372,7 @@ image, and each one **must** have its Root Directory set:
 >             "watchPatterns":["/services/scrapling/**"]}}}'
 > ```
 >
-> Do not pass `builder` — the `Builder` enum has no `DOCKERFILE` value (only
+> Do not pass `builder`, because the `Builder` enum has no `DOCKERFILE` value (only
 > HEROKU/NIXPACKS/PAKETO/RAILPACK) and the whole mutation fails with a generic
 > "Problem processing request". Railway detects the Dockerfile from the path.
 >
@@ -425,8 +425,8 @@ cp .env.example .env.local
 ### 3. Run the sidecars you need, locally
 
 Only the **Tools** service has a public domain. The four backing services are
-private — reachable at `*.railway.internal` from inside the project and from
-nowhere else — so a laptop cannot point at them, by design (see
+private, reachable at `*.railway.internal` from inside the project and from
+nowhere else, so a laptop cannot point at them. That is deliberate (see
 [Exposure](#exposure)).
 
 For most work you do not need them. Run the server against whichever sidecars you
@@ -446,15 +446,15 @@ pnpm run start
 ```
 
 The server is at `http://localhost:3000`. `API_KEY` is required but arbitrary
-locally — it only guards your own endpoint.
+locally, since it only guards your own endpoint.
 
 Leave a URL out and that path degrades rather than fails: `SEARXNG_URL` alone gives
 you `web_search`; `CRAWL4AI_URL` gives `web_crawl` / `web_screenshot` / `web_pdf`
 and markdown rendering; `web_fetch` and `web_html` fall back to Crawl4AI when the
 stealth sidecars are absent. The two stealth sidecars each bake a browser into
 their image (~200MB Chromium for Scrapling, Camoufox's Firefox plus a GeoIP
-database), and their residential paths need a `PROXY_URL` you supply — build them
-only when you are working on those paths specifically.
+database), and their residential paths need a `PROXY_URL` you supply, so build
+them only when you are working on those paths specifically.
 
 If you genuinely need to reach a deployed sidecar from your machine, add a service
 domain temporarily (`railway domain --service Crawl4AI`) and delete it when you are
@@ -469,13 +469,13 @@ network:
 
 | Service | Public domain | Why |
 | --- | --- | --- |
-| Tools | **yes** | the API surface — MCP + REST, API-key guarded |
-| SearXNG | no | it has **no authentication of its own**, so a public domain is an open search proxy — and its outgoing requests egress through your metered `PROXY_URL` |
+| Tools | **yes** | the API surface: MCP + REST, API-key guarded |
+| SearXNG | no | it has **no authentication of its own**, so a public domain is an open search proxy, and its outgoing requests egress through your metered `PROXY_URL` |
 | Crawl4AI | no | `CRAWL4AI_API_TOKEN` is the only thing between a public domain and free use of your browser fleet |
 | Scrapling | no | residential egress; nothing should reach it but Tools |
 | Camoufox | no | residential egress + warmed anti-bot sessions |
 
-`SEARXNG_SECRET_KEY` is not an access credential — it is SearXNG's internal
+`SEARXNG_SECRET_KEY` is not an access credential. It is SearXNG's internal
 signing secret, needed whether or not the service is exposed. Removing a public
 domain is what makes a service private; deleting its credentials just makes it
 broken or open.
