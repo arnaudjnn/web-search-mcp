@@ -302,15 +302,20 @@ async def _prewarm() -> None:
     """
     loop = asyncio.get_running_loop()
 
-    async def warm(mode: Mode) -> None:
-        try:
-            await loop.run_in_executor(_executors[mode], _ensure_session_in_worker, mode)
-            log.info("prewarmed %s", mode.value)
-        except Exception as e:  # noqa: BLE001 - never fatal
-            log.warning("prewarm %s failed (will build lazily): %s", mode.value, e)
+    async def warm_all() -> None:
+        # SEQUENTIALLY. Launching two browsers at once from one process fails with
+        # "Racing with another loop to spawn a process" — Patchright cannot spawn
+        # concurrently even from separate executor threads. Warming them in
+        # parallel cost the stealth session on the first attempt at this, which is
+        # the LinkedIn path and the one most worth having warm.
+        for mode in PREWARM:
+            try:
+                await loop.run_in_executor(_executors[mode], _ensure_session_in_worker, mode)
+                log.info("prewarmed %s", mode.value)
+            except Exception as e:  # noqa: BLE001 - never fatal
+                log.warning("prewarm %s failed (will build lazily): %s", mode.value, e)
 
-    for m in PREWARM:
-        asyncio.create_task(warm(m))
+    asyncio.create_task(warm_all())
 
 
 @app.get("/healthz")
