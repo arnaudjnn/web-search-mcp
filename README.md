@@ -202,6 +202,85 @@ Retrieve an archived page from the Wayback Machine.
 
 Returns the archived page content.
 
+### `web_bytes`
+
+Download a URL's raw bytes through the residential exit, base64-encoded. Use for
+PDFs and other binaries behind a bot-gated or geo-sensitive origin, where
+rendering the page as text would lose the document.
+
+| Parameter    | Type              | Description                          |
+| ------------ | ----------------- | ------------------------------------ |
+| `url`        | string (required) | URL of the binary to download        |
+| `timeout_ms` | number (optional) | Fetch timeout (default: 60000)       |
+
+Returns `{ status, url, size_b64, b64 }`. A non-2xx arrives in `status` rather
+than raised, so a caller fetching a PDF that 404s still learns what happened.
+
+### `web_eval`
+
+Evaluate JavaScript in a residential browser page and return its JSON result. Use
+for driving or inspecting a JS app (open a facet, read the codes behind it) on a
+site that bot-gates this host's own IP, which `web_execute_js` cannot reach
+because it runs from that IP.
+
+| Parameter      | Type              | Description                                                  |
+| -------------- | ----------------- | ------------------------------------------------------------ |
+| `url`          | string (required) | URL to open                                                  |
+| `js`           | string (required) | Expression or IIFE evaluated in the page; must return JSON    |
+| `wait_until`   | enum (optional)   | `load`, `domcontentloaded`, `networkidle`, `commit`           |
+| `wait_ms`      | number (optional) | Extra settle time after load (default: 6000)                  |
+| `timeout_ms`   | number (optional) | Navigation timeout (default: 90000)                           |
+| `fresh_ip`     | boolean (optional)| Serve from a new context on a new exit IP, with clean cookies  |
+
+Returns `{ status, url, result }`.
+
+### `web_spa_fetch`
+
+Perform a same-origin in-page fetch on a warmed browser session, for origins that
+gate requests on an anti-bot sensor cookie.
+
+| Parameter          | Type              | Description                                                     |
+| ------------------ | ----------------- | --------------------------------------------------------------- |
+| `base_url`         | string (required) | Origin to warm and fetch against                                 |
+| `path`             | string (required) | Same-origin path for the in-page fetch                           |
+| `warm_path`        | string (optional) | Path navigated to warm the sensor (default: `/`)                 |
+| `method`           | string (optional) | HTTP method (default: `GET`)                                     |
+| `body`             | object (optional) | JSON body, sent as a JSON string                                 |
+| `accept`           | string (optional) | Accept header (default: `application/json`)                      |
+| `sensor_wait_ms`   | number (optional) | Time spent seeding the sensor on a warm (default: 20000)         |
+| `mature_probe`     | object (optional) | `{method,path,body,accept}` replayed until it stops returning 403 |
+| `mature_max_tries` | number (optional) | Maturation attempts (default: 6)                                 |
+| `timeout_ms`       | number (optional) | Client timeout (default: 180000)                                 |
+
+Returns `{ status, text }`, where `status` is the in-page fetch's own HTTP status.
+A 403 means the sensor has not cleared, so the caller should re-mature or recycle.
+
+This is the only stateful tool here. The sidecar keeps one warmed page per
+`(base_url, warm_path)`, pins it to a sticky residential exit and feeds the sensor
+on a keepalive so the cookie stays validated. Treat the session as shared:
+`web_recycle`, or anything that tears the browser down, costs whoever is mid-crawl
+their maturation.
+
+### `web_recycle`
+
+Drop the warmed session and the render browser, and take a fresh exit IP. No
+parameters.
+
+Expensive (a full browser relaunch) and disruptive to any crawl in flight, so
+reach for it only when an exit IP has been rate-hardened by a target and will not
+recover on its own. For a fresh IP on a single request, pass `fresh_ip` to
+`web_eval` instead, which costs about a second.
+
+### `web_usage_stats`
+
+Process-local usage counters: per-tool call counts, approximate proxy bandwidth
+and an estimated cost. No parameters.
+
+In-memory only, so it resets on container restart; the `started_at` field lets a
+caller detect that. Only the proxied tools accrue bandwidth, and their byte counts
+are an upper bound rather than a measurement, since `web_fetch` and `web_html`
+fall back to the unproxied browser when a sidecar is unreachable.
+
 ## Interfaces
 
 ### MCP
