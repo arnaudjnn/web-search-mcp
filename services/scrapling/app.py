@@ -280,6 +280,39 @@ class FetchResponse(BaseModel):
     escalated: bool = False
 
 
+# Modes worth paying for before the first request arrives. A browser launch costs
+# tens of seconds on a cold container, and the caller's budget is finite: web-tools
+# aborts a fetch at timeout+25s and falls back to the plain datacenter browser. So a
+# cold start does not merely feel slow, it silently downgrades the result — LinkedIn
+# came back from Crawl4AI's blocked IP twice because the first stealth request of a
+# fresh container never finished in time.
+#
+# SOLVE is deliberately not pre-warmed: nothing routes to it by host any more, it is
+# only reached by escalation, and it is the most expensive session to build.
+PREWARM = (Mode.FAST, Mode.STEALTH)
+
+
+@app.on_event("startup")
+async def _prewarm() -> None:
+    """Build the hot sessions in the background, without blocking startup.
+
+    Fire-and-forget on purpose: the container must report ready immediately, and a
+    warm that fails (no PROXY_URL, for instance) has to degrade to lazy building
+    rather than stop the service from serving the modes that do work.
+    """
+    loop = asyncio.get_running_loop()
+
+    async def warm(mode: Mode) -> None:
+        try:
+            await loop.run_in_executor(_executors[mode], _ensure_session_in_worker, mode)
+            log.info("prewarmed %s", mode.value)
+        except Exception as e:  # noqa: BLE001 - never fatal
+            log.warning("prewarm %s failed (will build lazily): %s", mode.value, e)
+
+    for m in PREWARM:
+        asyncio.create_task(warm(m))
+
+
 @app.get("/healthz")
 def healthz():
     return {

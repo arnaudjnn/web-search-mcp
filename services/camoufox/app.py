@@ -542,6 +542,30 @@ app = FastAPI(title="camoufox", version="1.0.0")
 
 
 @app.on_event("startup")
+async def _prewarm_render() -> None:
+    """Launch the render browser before the first request needs it.
+
+    /render, /screenshot, /eval and /bytes all share this browser, and building it
+    costs tens of seconds. Callers upstream abort and fall back, so a cold start
+    changes the ANSWER rather than just the latency. Fire-and-forget: startup must
+    not block, and a failure has to leave lazy building intact.
+
+    The Akamai warmed page stays lazy — it is keyed by (base_url, warm_path), so
+    there is nothing to warm until a caller says which origin it wants.
+    """
+    loop = asyncio.get_running_loop()
+
+    async def warm() -> None:
+        try:
+            await loop.run_in_executor(_render_executor, _ensure_render_browser)
+            log.info("prewarmed render browser")
+        except Exception as e:  # noqa: BLE001 - never fatal
+            log.warning("render prewarm failed (will build lazily): %s", e)
+
+    asyncio.create_task(warm())
+
+
+@app.on_event("startup")
 async def _start_keepalive():
     if KEEPALIVE_SEC <= 0:
         return
